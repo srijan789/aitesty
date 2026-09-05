@@ -52,7 +52,11 @@
                   </a>
                 </td>
                 <td class="px-6 py-4">
-                  {% if r.run_type == 'exploration' %}
+                  {% if r.run_type == 'e2e_pipeline' %}
+                    <span class="inline-flex items-center text-purple-700 font-semibold bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                      <i class="fa-solid fa-wand-magic-sparkles mr-1.5 text-purple-600"></i>E2E Agent
+                    </span>
+                  {% elif r.run_type == 'exploration' %}
                     <span class="inline-flex items-center text-indigo-700 font-medium">
                       <i class="fa-solid fa-compass mr-1.5 text-indigo-500"></i>Exploration
                     </span>
@@ -90,7 +94,20 @@
                   {% endif %}
                 </td>
                 <td class="px-6 py-4 text-slate-600">
-                  {% if r.run_type == 'exploration' and stats.get('total_scenarios') is not none %}
+                  {% if r.run_type == 'e2e_pipeline' %}
+                    <div class="space-y-0.5">
+                      <div class="flex items-center space-x-1.5">
+                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800">
+                          Stage: {{ stats.get('stage', 'running')|capitalize }} ({{ stats.get('progress_percent', 0) }}%)
+                        </span>
+                      </div>
+                      <div class="text-[11px] text-slate-500">
+                        Pass: <strong class="text-emerald-600">{{ stats.get('execution', {}).get('passed', 0) }}</strong> /
+                        Fail: <strong class="text-rose-600">{{ stats.get('execution', {}).get('failed', 0) }}</strong> |
+                        Healed: <strong class="text-indigo-600">{{ stats.get('healing', {}).get('healed_count', 0) }}</strong>
+                      </div>
+                    </div>
+                  {% elif r.run_type == 'exploration' and stats.get('total_scenarios') is not none %}
                     <span class="font-bold text-slate-800">{{ stats.get('total_scenarios') }}</span> scenarios synthesized
                   {% elif r.run_type == 'healing' %}
                     <div class="space-y-0.5">

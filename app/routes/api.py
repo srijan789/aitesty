@@ -59,6 +59,78 @@ def trigger_exploration(project_id):
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+@api_bp.route("/projects/<project_id>/e2e", methods=["POST"])
+def trigger_e2e(project_id):
+    try:
+        data = request.get_json(silent=True) or {}
+        headless = data.get("headless")
+        if headless is None and "headless" in request.args:
+            headless = request.args.get("headless", "").lower() != "false"
+        slow_mo = data.get("slow_mo")
+        if slow_mo is None and "slow_mo" in request.args:
+            slow_mo = request.args.get("slow_mo", type=int)
+
+        crawl_depth = data.get("crawl_depth")
+        if crawl_depth is None and "crawl_depth" in request.args:
+            crawl_depth = request.args.get("crawl_depth", type=int)
+
+        max_pages = data.get("max_pages")
+        if max_pages is None and "max_pages" in request.args:
+            max_pages = request.args.get("max_pages", type=int)
+
+        target_test_count = data.get("target_test_count")
+        if target_test_count is None and "target_test_count" in request.args:
+            target_test_count = request.args.get("target_test_count", type=int)
+
+        exploration_strategy = data.get("exploration_strategy")
+        if exploration_strategy is None and "exploration_strategy" in request.args:
+            exploration_strategy = request.args.get("exploration_strategy")
+
+        run = TestOrchestrator.trigger_e2e_pipeline(
+            project_id=project_id,
+            trigger_source="api",
+            headless=headless,
+            slow_mo=slow_mo,
+            crawl_depth=crawl_depth,
+            max_pages=max_pages,
+            target_test_count=target_test_count,
+            exploration_strategy=exploration_strategy,
+        )
+        return jsonify({
+            "success": True,
+            "run_id": run.id,
+            "status": run.status,
+            "message": "Autonomous End-to-End QA Pipeline queued.",
+        }), 202
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@api_bp.route("/projects/<project_id>/e2e-status", methods=["GET"])
+def get_e2e_status(project_id):
+    try:
+        latest_run = (
+            TestRun.query.filter_by(project_id=project_id, run_type="e2e_pipeline")
+            .order_by(TestRun.started_at.desc())
+            .first()
+        )
+        if not latest_run:
+            return jsonify({"has_e2e_run": False}), 200
+
+        stats = latest_run.get_summary_stats()
+        return jsonify({
+            "has_e2e_run": True,
+            "run_id": latest_run.id,
+            "status": latest_run.status,
+            "stage": stats.get("stage", "unknown"),
+            "progress_percent": stats.get("progress_percent", 0),
+            "stats": stats,
+            "started_at": latest_run.started_at.isoformat() if latest_run.started_at else None,
+            "completed_at": latest_run.completed_at.isoformat() if latest_run.completed_at else None,
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @api_bp.route("/projects/<project_id>/generate-tests", methods=["POST"])
 def trigger_test_generation(project_id):
     try:

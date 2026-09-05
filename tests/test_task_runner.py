@@ -48,6 +48,8 @@ def test_task_runner_executes_and_completes(app):
         assert r.status == "completed"
         assert r.duration_ms is not None
         assert r.duration_ms >= 50
+    runner.wait_for_all_tasks(timeout=2.0)
+    runner.executor.shutdown(wait=True)
 
 def test_task_runner_cancellation(app):
     runner = TaskRunner(max_workers=2)
@@ -84,3 +86,5 @@ def test_task_runner_cancellation(app):
     with app.app_context():
         r = db.session.get(TestRun, run_id)
         assert r.status == "cancelled"
+    runner.wait_for_all_tasks(timeout=2.0)
+    runner.executor.shutdown(wait=True)

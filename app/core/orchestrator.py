@@ -739,3 +739,81 @@ class TestOrchestrator:
             stats,
         )
 
+    @classmethod
+    def trigger_e2e_pipeline(
+        cls,
+        project_id: str,
+        crawl_depth: Optional[int] = None,
+        max_pages: Optional[int] = None,
+        target_test_count: Optional[int] = None,
+        exploration_strategy: Optional[str] = None,
+        trigger_source: str = "manual",
+        headless: Optional[bool] = None,
+        slow_mo: Optional[int] = None,
+    ) -> TestRun:
+        """
+        Triggers the Autonomous End-to-End QA Pipeline:
+        Deep Crawl -> Plan Review -> Test Generation -> Execution -> Self-Healing (max 2 iterations).
+        """
+        project = db.get_or_404(Project, project_id)
+        wm = cls.get_workspace_manager()
+
+        run = TestRun(
+            project_id=project.id,
+            run_type="e2e_pipeline",
+            trigger=trigger_source,
+            status="queued",
+            summary_stats_json=json.dumps({
+                "stage": "queued",
+                "progress_percent": 0,
+            }),
+        )
+        db.session.add(run)
+        db.session.commit()
+
+        wm.init_run_dir(project.id, run.id)
+        run.run_dir = f"runs/{run.id}"
+        db.session.commit()
+
+        task_runner.submit_task(
+            run.id,
+            cls._run_e2e_pipeline_task,
+            project_id=project.id,
+            crawl_depth=crawl_depth,
+            max_pages=max_pages,
+            target_test_count=target_test_count,
+            exploration_strategy=exploration_strategy,
+            headless=headless,
+            slow_mo=slow_mo,
+        )
+        return run
+
+    @classmethod
+    def _run_e2e_pipeline_task(
+        cls,
+        run_id: str,
+        cancel_event,
+        project_id: str,
+        crawl_depth: Optional[int] = None,
+        max_pages: Optional[int] = None,
+        target_test_count: Optional[int] = None,
+        exploration_strategy: Optional[str] = None,
+        headless: Optional[bool] = None,
+        slow_mo: Optional[int] = None,
+    ):
+        from app.core.e2e_agent import EndToEndAgent
+
+        agent = EndToEndAgent(cls.get_workspace_manager())
+        agent.run_pipeline(
+            run_id=run_id,
+            cancel_event=cancel_event,
+            project_id=project_id,
+            crawl_depth=crawl_depth,
+            max_pages=max_pages,
+            target_test_count=target_test_count,
+            exploration_strategy=exploration_strategy,
+            headless=headless,
+            slow_mo=slow_mo,
+        )
+
+

@@ -119,6 +119,9 @@ class PlaywrightHealingAgent(BaseHealingAgent):
                 except Exception as e:
                     logger.warning(f"Failed to read results.json from {run_id}: {e}")
 
+            if not results_data and config.run_results:
+                results_data = config.run_results[0]
+
             tests_in_run = results_data.get("tests", [])
             for t in tests_in_run:
                 if t.get("status") == "failed":
@@ -261,9 +264,11 @@ class PlaywrightHealingAgent(BaseHealingAgent):
         scenario_title = test_data.get("scenario_title") or test_name
         file_name = test_data.get("file_name")
         error_details = test_data.get("error_details") or {}
-        error_message = error_details.get("error_message") or "Unknown error"
-        traceback_str = error_details.get("traceback") or ""
-        classification_data = error_details.get("classification") or {}
+        error_message = error_details.get("error_message") or test_data.get("error_message") or "Unknown error"
+        traceback_str = error_details.get("traceback") or test_data.get("traceback") or ""
+        classification_data = error_details.get("classification") or test_data.get("classification") or {}
+        if not classification_data and test_data.get("failure_classification"):
+            classification_data = {"classification": test_data.get("failure_classification")}
         steps = test_data.get("steps") or []
         network_events = test_data.get("network_events") or []
         console_messages = test_data.get("console_messages") or []
@@ -504,14 +509,17 @@ Isolated Test Log Preview:
                 if not tc and a.scenario_title:
                     tc = TestCase.query.filter_by(test_plan_id=active_plan.id, title=a.scenario_title).first()
                 if not tc:
-                    # Try matching by title prefix or test_name tokens
+                    # Try matching by title prefix or tokens from test_name or scenario_title
+                    title_tokens = [tok for tok in a.scenario_title.split() if len(tok) > 3]
                     clean_tokens = [tok for tok in a.test_name.replace("test_", "").split("_") if len(tok) > 3]
+                    search_tokens = title_tokens + clean_tokens
                     for candidate in active_plan.test_cases:
-                        if any(tok.lower() in candidate.title.lower() for tok in clean_tokens):
+                        if any(tok.lower() in candidate.title.lower() for tok in search_tokens):
                             tc = candidate
                             break
 
                 if tc:
+                    a.scenario_id = tc.id
                     # Construct rich healing note
                     origin_tag = f"[{a.failure_origin}]"
                     verdict_tag = f"[{a.verdict}]"

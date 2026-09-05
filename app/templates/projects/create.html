@@ -164,6 +164,23 @@
         </div>
       </div>
 
+      <!-- Section 6: Autonomous End-to-End Pipeline Option -->
+      <div class="space-y-3 pt-4 border-t border-slate-100 bg-gradient-to-r from-indigo-50/60 to-purple-50/60 -mx-6 px-6 py-4 rounded-xl border border-indigo-100">
+        <label class="flex items-start space-x-3 cursor-pointer">
+          <input type="checkbox" id="auto_run_e2e" name="auto_run_e2e" value="true" checked
+            class="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
+          <div>
+            <span class="text-sm font-semibold text-slate-900 flex items-center">
+              <i class="fa-solid fa-wand-magic-sparkles mr-1.5 text-indigo-600"></i>
+              Activate Autonomous End-to-End QA Agent Immediately
+            </span>
+            <p class="text-xs text-slate-600 mt-0.5">
+              Automatically runs the full 5-stage pipeline upon creation: <strong>Deep Crawl</strong> ➔ <strong>Plan Review & Approval</strong> ➔ <strong>Code Generation</strong> ➔ <strong>Test Execution</strong> ➔ <strong>Self-Healing (up to 2 loops)</strong>.
+            </p>
+          </div>
+        </label>
+      </div>
+
       <!-- Form Actions -->
       <div class="pt-4 border-t border-slate-100 flex items-center justify-end space-x-3">
         <a href="{{ url_for('projects.index') }}" class="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800">Cancel</a>

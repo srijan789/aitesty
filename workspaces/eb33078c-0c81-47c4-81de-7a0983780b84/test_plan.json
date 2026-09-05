@@ -1,0 +1,475 @@
+{
+  "id": "3f74f0c7-9308-4a1c-8889-9ebd8a271c74",
+  "project_id": "eb33078c-0c81-47c4-81de-7a0983780b84",
+  "version": 2,
+  "status": "active",
+  "summary": "E2E Automated Test Plan for Nanotrak (v2)",
+  "raw_markdown": null,
+  "created_at": "2026-09-05T12:21:10.529187",
+  "updated_at": "2026-09-05T12:21:10.529187",
+  "scenarios": [
+    {
+      "id": "f6ccf787-d3b0-4ce7-860f-ed8fddbb6259",
+      "test_plan_id": "3f74f0c7-9308-4a1c-8889-9ebd8a271c74",
+      "title": "Admin Authentication with Valid Credentials",
+      "category": "happy_path",
+      "priority": "P0",
+      "preconditions": "User is on the login page ('/') unauthenticated.",
+      "description": "Verify that valid admin credentials allow successful sign in and redirection to the admin overview dashboard.",
+      "steps": [
+        {
+          "action": "Navigate",
+          "expected_outcome": "Login page with email and password inputs displayed",
+          "target_element": "https://nanotrak.multicorewareinc.com:3001/",
+          "step_number": 1
+        },
+        {
+          "expected_outcome": "Email input contains admin@nanotrak.com",
+          "action": "Fill",
+          "target_element": "input[type=\"email\"]",
+          "step_number": 2
+        },
+        {
+          "step_number": 3,
+          "target_element": "input[type=\"password\"]",
+          "action": "Fill",
+          "expected_outcome": "Password input is populated"
+        },
+        {
+          "target_element": "button:has-text(\"Sign in\")",
+          "step_number": 4,
+          "expected_outcome": "Redirects to /admin/overview with user directory and catalog links",
+          "action": "Click"
+        }
+      ],
+      "expected_result": "User logs in successfully and is redirected to /admin/overview displaying platform metrics.",
+      "pass_fail_criteria": "PASS if dashboard loads with status 200 and 'Admin NanoTrak' profile is visible; FAIL if login fails or stays on login screen.",
+      "script_path": null,
+      "status": "marked_for_automation",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 0,
+      "created_at": "2026-09-05T12:21:10.530755"
+    },
+    {
+      "id": "429af089-6233-4c9e-b356-fcaeb6457057",
+      "test_plan_id": "3f74f0c7-9308-4a1c-8889-9ebd8a271c74",
+      "title": "Admin Authentication Rejection with Invalid Credentials",
+      "category": "error_flow",
+      "priority": "P0",
+      "preconditions": "User is on login page unauthenticated.",
+      "description": "Verify that signing in with invalid password rejects login and displays error notification without redirecting.",
+      "steps": [
+        {
+          "action": "Navigate",
+          "expected_outcome": "Login page is loaded",
+          "step_number": 1,
+          "target_element": "https://nanotrak.multicorewareinc.com:3001/"
+        },
+        {
+          "expected_outcome": "Email field contains valid user email",
+          "target_element": "input[type=\"email\"]",
+          "action": "Fill",
+          "step_number": 2
+        },
+        {
+          "target_element": "input[type=\"password\"]",
+          "expected_outcome": "Password field contains invalid string 'WrongPassword123'",
+          "step_number": 3,
+          "action": "Fill"
+        },
+        {
+          "expected_outcome": "Validation/Authentication error message is shown",
+          "target_element": "button:has-text(\"Sign in\")",
+          "step_number": 4,
+          "action": "Click"
+        }
+      ],
+      "expected_result": "Authentication fails with an error message and user remains on login page.",
+      "pass_fail_criteria": "PASS if login is rejected with error feedback; FAIL if access to admin dashboard is granted.",
+      "script_path": null,
+      "status": "marked_for_automation",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 1,
+      "created_at": "2026-09-05T12:21:10.530760"
+    },
+    {
+      "id": "04a65e58-d91a-4457-8c82-9043bf0c14a3",
+      "test_plan_id": "3f74f0c7-9308-4a1c-8889-9ebd8a271c74",
+      "title": "Admin Overview Dashboard Metrics and Refresh Functionality",
+      "category": "happy_path",
+      "priority": "P1",
+      "preconditions": "User is logged in and on /admin/overview.",
+      "description": "Verify that the admin overview dashboard renders charts, engagement stats, and metrics correctly.",
+      "steps": [
+        {
+          "expected_outcome": "Overview dashboard is loaded",
+          "step_number": 1,
+          "target_element": "https://nanotrak.multicorewareinc.com:3001/admin/overview",
+          "action": "Navigate"
+        },
+        {
+          "action": "Assert",
+          "target_element": "h2, h3, div",
+          "expected_outcome": "Headings 'FAN ENGAGEMENT DISTRIBUTION' and 'CELEBRITY SIGNING VOLUME' are present",
+          "step_number": 2
+        },
+        {
+          "action": "Click",
+          "expected_outcome": "Dashboard re-fetches latest telemetry and metrics seamlessly",
+          "target_element": "button:has-text(\"Refresh Data\")",
+          "step_number": 3
+        }
+      ],
+      "expected_result": "Overview dashboard displays Fan Engagement Distribution and Celebrity Signing Volume.",
+      "pass_fail_criteria": "PASS if overview widgets render properly and Refresh Data updates dashboard without errors.",
+      "script_path": null,
+      "status": "marked_for_automation",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 2,
+      "created_at": "2026-09-05T12:21:10.530763"
+    },
+    {
+      "id": "6918dac4-f193-4248-8ca1-cd9dacc6eee3",
+      "test_plan_id": "3f74f0c7-9308-4a1c-8889-9ebd8a271c74",
+      "title": "Open Celebrity Onboarding Wizard Modal",
+      "category": "happy_path",
+      "priority": "P1",
+      "preconditions": "User is logged in on /admin/celebrities.",
+      "description": "Verify opening the Celebrity Onboarding wizard modal from the Celebrities management directory.",
+      "steps": [
+        {
+          "target_element": "https://nanotrak.multicorewareinc.com:3001/admin/celebrities",
+          "step_number": 1,
+          "expected_outcome": "Celebrity Management directory is displayed",
+          "action": "Navigate"
+        },
+        {
+          "step_number": 2,
+          "expected_outcome": "Dropdown opens offering 'Celebrity Profile' and 'Hardware Pen'",
+          "target_element": "button:has-text(\"Add New\")",
+          "action": "Click"
+        },
+        {
+          "action": "Click",
+          "target_element": "button:has-text(\"Celebrity Profile\")",
+          "expected_outcome": "Onboard Celebrity modal opens with input fields",
+          "step_number": 3
+        }
+      ],
+      "expected_result": "Onboarding modal opens with multi-step celebrity registration form.",
+      "pass_fail_criteria": "PASS if 'ONBOARD CELEBRITY' form appears with first name, last name, email, and handle fields.",
+      "script_path": null,
+      "status": "marked_for_automation",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 3,
+      "created_at": "2026-09-05T12:21:10.530766"
+    },
+    {
+      "id": "384d5a33-afce-4c2f-ac82-f0a3a1567438",
+      "test_plan_id": "3f74f0c7-9308-4a1c-8889-9ebd8a271c74",
+      "title": "Celebrity Onboarding Form Validation on Empty Submission",
+      "category": "edge_case",
+      "priority": "P2",
+      "preconditions": "Celebrity Onboarding modal is open on /admin/celebrities.",
+      "description": "Verify validation handling when submitting an empty Celebrity Onboarding form on Step 1.",
+      "steps": [
+        {
+          "action": "Navigate",
+          "target_element": "https://nanotrak.multicorewareinc.com:3001/admin/celebrities",
+          "expected_outcome": "Celebrity management page loaded",
+          "step_number": 1
+        },
+        {
+          "step_number": 2,
+          "target_element": "button:has-text(\"Add New\")",
+          "action": "Click",
+          "expected_outcome": "Celebrity modal is opened"
+        },
+        {
+          "step_number": 3,
+          "action": "Click",
+          "target_element": "button:has-text(\"Celebrity Profile\")",
+          "expected_outcome": "Onboarding modal displayed with blank inputs"
+        },
+        {
+          "action": "Click",
+          "expected_outcome": "Validation errors appear on required inputs; form does not advance",
+          "step_number": 4,
+          "target_element": "button:has-text(\"NEXT STEP\")"
+        }
+      ],
+      "expected_result": "Form blocks progression to Step 2 and displays field validation errors for required inputs.",
+      "pass_fail_criteria": "PASS if wizard prevents advancing with empty fields; FAIL if step advances with null payload.",
+      "script_path": null,
+      "status": "marked_for_automation",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 4,
+      "created_at": "2026-09-05T12:21:10.530769"
+    },
+    {
+      "id": "52364a65-21df-41ac-8bbf-36769f763a9c",
+      "test_plan_id": "3f74f0c7-9308-4a1c-8889-9ebd8a271c74",
+      "title": "Fans Directory Search and Real-time Filter",
+      "category": "happy_path",
+      "priority": "P2",
+      "preconditions": "User is logged in on /admin/fans.",
+      "description": "Verify live search filtering in the Fans management directory.",
+      "steps": [
+        {
+          "expected_outcome": "Fans management page loads with table/cards",
+          "step_number": 1,
+          "action": "Navigate",
+          "target_element": "https://nanotrak.multicorewareinc.com:3001/admin/fans"
+        },
+        {
+          "expected_outcome": "Search term is entered into filter input",
+          "target_element": "input[placeholder*=\"Search by fan\"]",
+          "action": "Fill",
+          "step_number": 2
+        },
+        {
+          "action": "Assert",
+          "target_element": "div[role=\"region\"], table, div",
+          "expected_outcome": "Filtered results match search term or display empty state indicator",
+          "step_number": 3
+        }
+      ],
+      "expected_result": "Fan list filters in real-time based on fan name, email, or location query.",
+      "pass_fail_criteria": "PASS if query filters items or shows appropriate empty state when no matching fan found.",
+      "script_path": null,
+      "status": "marked_for_automation",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 5,
+      "created_at": "2026-09-05T12:21:10.530773"
+    },
+    {
+      "id": "0432493c-c915-441e-a2c6-10f84ca20957",
+      "test_plan_id": "3f74f0c7-9308-4a1c-8889-9ebd8a271c74",
+      "title": "Verifier Directory Navigation and Actions Visibility",
+      "category": "happy_path",
+      "priority": "P1",
+      "preconditions": "User is logged in.",
+      "description": "Verify navigation and verifier list rendering in Verifier Management view.",
+      "steps": [
+        {
+          "target_element": "https://nanotrak.multicorewareinc.com:3001/admin/verifiers",
+          "expected_outcome": "Verifier Management page loads with title and actions",
+          "action": "Navigate",
+          "step_number": 1
+        },
+        {
+          "target_element": "button:has-text(\"Add Verifier\")",
+          "action": "Assert",
+          "expected_outcome": "'Add Verifier' button and verifier search input are accessible",
+          "step_number": 2
+        }
+      ],
+      "expected_result": "Verifier management directory renders search input and 'Add Verifier' button.",
+      "pass_fail_criteria": "PASS if verifier management page loads successfully with HTTP 200 and search input.",
+      "script_path": null,
+      "status": "marked_for_automation",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 6,
+      "created_at": "2026-09-05T12:21:10.530776"
+    },
+    {
+      "id": "d7ac0ac3-298b-4e79-b97e-4f96aeb59a95",
+      "test_plan_id": "3f74f0c7-9308-4a1c-8889-9ebd8a271c74",
+      "title": "Hardware Pens Catalog and Inventory Management View",
+      "category": "happy_path",
+      "priority": "P1",
+      "preconditions": "User is logged in.",
+      "description": "Verify navigation to Hardware Pens catalog and inventory management view.",
+      "steps": [
+        {
+          "step_number": 1,
+          "expected_outcome": "Hardware pens inventory view loads successfully",
+          "target_element": "https://nanotrak.multicorewareinc.com:3001/admin/pens",
+          "action": "Navigate"
+        },
+        {
+          "expected_outcome": "Pens catalog list and status badges are rendered",
+          "target_element": "body",
+          "step_number": 2,
+          "action": "Assert"
+        }
+      ],
+      "expected_result": "Pens catalog renders hardware status, pairing statuses, and device identifiers.",
+      "pass_fail_criteria": "PASS if /admin/pens loads device table with battery, connection, and assignment data.",
+      "script_path": null,
+      "status": "marked_for_automation",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 7,
+      "created_at": "2026-09-05T12:21:10.530779"
+    },
+    {
+      "id": "35e2e762-738b-4244-be4c-0734d5ec203d",
+      "test_plan_id": "3f74f0c7-9308-4a1c-8889-9ebd8a271c74",
+      "title": "Products Catalog Navigation and View",
+      "category": "happy_path",
+      "priority": "P2",
+      "preconditions": "User is logged in.",
+      "description": "Verify navigation to Products catalog and digital item management view.",
+      "steps": [
+        {
+          "target_element": "https://nanotrak.multicorewareinc.com:3001/admin/products",
+          "action": "Navigate",
+          "step_number": 1,
+          "expected_outcome": "Products view loads successfully"
+        },
+        {
+          "step_number": 2,
+          "target_element": "body",
+          "expected_outcome": "Product catalog list is displayed",
+          "action": "Assert"
+        }
+      ],
+      "expected_result": "Products management directory loads item list and digital twin records.",
+      "pass_fail_criteria": "PASS if /admin/products loads with 200 OK and product management controls.",
+      "script_path": null,
+      "status": "marked_for_automation",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 8,
+      "created_at": "2026-09-05T12:21:10.530781"
+    },
+    {
+      "id": "8b4e14b3-fff3-4a72-997a-d80785969abb",
+      "test_plan_id": "3f74f0c7-9308-4a1c-8889-9ebd8a271c74",
+      "title": "Support Center Ticket Management Queue View",
+      "category": "happy_path",
+      "priority": "P1",
+      "preconditions": "User is logged in.",
+      "description": "Verify Support Center ticket management dashboard loads active tickets.",
+      "steps": [
+        {
+          "step_number": 1,
+          "target_element": "https://nanotrak.multicorewareinc.com:3001/admin/support-center",
+          "action": "Navigate",
+          "expected_outcome": "Support Center dashboard is loaded"
+        },
+        {
+          "expected_outcome": "Ticket queue table/cards are displayed with status tags",
+          "target_element": "body",
+          "step_number": 2,
+          "action": "Assert"
+        }
+      ],
+      "expected_result": "Support Center page renders ticket management interface and resolution workflows.",
+      "pass_fail_criteria": "PASS if /admin/support-center displays support ticket queue and filtering tools.",
+      "script_path": null,
+      "status": "marked_for_automation",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 9,
+      "created_at": "2026-09-05T12:21:10.530784"
+    },
+    {
+      "id": "0c1995d2-1f87-4f32-b7c0-00d084a3addd",
+      "test_plan_id": "3f74f0c7-9308-4a1c-8889-9ebd8a271c74",
+      "title": "Autograph Verification Status Tracking View",
+      "category": "happy_path",
+      "priority": "P1",
+      "preconditions": "User is logged in.",
+      "description": "Verify Verification Status tracking view renders signature verification telemetry.",
+      "steps": [
+        {
+          "action": "Navigate",
+          "expected_outcome": "Verification Status tracking page loads",
+          "target_element": "https://nanotrak.multicorewareinc.com:3001/admin/verification-status",
+          "step_number": 1
+        },
+        {
+          "target_element": "body",
+          "action": "Assert",
+          "expected_outcome": "Verification status metrics and tracking entries are displayed",
+          "step_number": 2
+        }
+      ],
+      "expected_result": "Status Tracking page displays ongoing and completed autograph verification pipeline states.",
+      "pass_fail_criteria": "PASS if /admin/verification-status loads with timeline and status metrics.",
+      "script_path": null,
+      "status": "marked_for_automation",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 10,
+      "created_at": "2026-09-05T12:21:10.530787"
+    },
+    {
+      "id": "fc07b4a6-9c6f-4025-ba41-a15a999ddef0",
+      "test_plan_id": "3f74f0c7-9308-4a1c-8889-9ebd8a271c74",
+      "title": "404 Error Handling for Invalid Admin Routes",
+      "category": "error_flow",
+      "priority": "P2",
+      "preconditions": "User is logged in.",
+      "description": "Verify application behavior when navigating to an invalid or non-existent route.",
+      "steps": [
+        {
+          "action": "Navigate",
+          "target_element": "https://nanotrak.multicorewareinc.com:3001/admin/non-existent-route",
+          "step_number": 1,
+          "expected_outcome": "Page displays 404 Not Found state or falls back to admin overview safely"
+        },
+        {
+          "action": "Assert",
+          "step_number": 2,
+          "expected_outcome": "Navigation sidebar remains responsive and functional",
+          "target_element": "a[href=\"/admin/overview\"]"
+        }
+      ],
+      "expected_result": "Application gracefully displays a 404 page or redirects back to /admin/overview without crashing.",
+      "pass_fail_criteria": "PASS if application handles non-existent route gracefully without unhandled JS exceptions; FAIL if white-screen crash occurs.",
+      "script_path": null,
+      "status": "marked_for_automation",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 11,
+      "created_at": "2026-09-05T12:21:10.530790"
+    },
+    {
+      "id": "9d66a8dc-abbd-4434-92d7-41e67e6dbae7",
+      "test_plan_id": "3f74f0c7-9308-4a1c-8889-9ebd8a271c74",
+      "title": "Search Filter Input Sanitization with Special Characters",
+      "category": "edge_case",
+      "priority": "P2",
+      "preconditions": "User is logged in on /admin/celebrities.",
+      "description": "Verify search input behavior with special characters and SQL injection strings across admin directories.",
+      "steps": [
+        {
+          "step_number": 1,
+          "target_element": "https://nanotrak.multicorewareinc.com:3001/admin/celebrities",
+          "expected_outcome": "Celebrity directory loaded",
+          "action": "Navigate"
+        },
+        {
+          "action": "Fill",
+          "step_number": 2,
+          "expected_outcome": "Input accepted safely without breaking DOM or network queries",
+          "target_element": "input[placeholder*=\"Search celebrities\"]"
+        },
+        {
+          "step_number": 3,
+          "action": "Assert",
+          "target_element": "body",
+          "expected_outcome": "Table displays no results or sanitized query indicator"
+        }
+      ],
+      "expected_result": "Search fields sanitize inputs without rendering errors or breaking the UI.",
+      "pass_fail_criteria": "PASS if UI sanitizes string and displays zero results cleanly without crashing.",
+      "script_path": null,
+      "status": "marked_for_automation",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 12,
+      "created_at": "2026-09-05T12:21:10.530793"
+    }
+  ]
+}
