@@ -21,7 +21,13 @@ class Config:
     COVERAGE_THRESHOLD = float(os.environ.get("COVERAGE_THRESHOLD", 0.6))
 =======
     EXPLORER_AGENT_TYPE = os.environ.get("EXPLORER_AGENT_TYPE", "playwright")
-    
+    GENERATOR_AGENT_TYPE = os.environ.get("GENERATOR_AGENT_TYPE", "mock")
+    HEALER_AGENT_TYPE = os.environ.get("HEALER_AGENT_TYPE", "mock")
+
+    MAX_REPLAN_CYCLES = int(os.environ.get("MAX_REPLAN_CYCLES", 2))
+    MAX_HEAL_ATTEMPTS = int(os.environ.get("MAX_HEAL_ATTEMPTS", 3))
+    COVERAGE_THRESHOLD = float(os.environ.get("COVERAGE_THRESHOLD", 0.6))
+
     # LLM Gateway Configuration
     TRUEFOUNDRY_API_KEY = os.environ.get(
         "TRUEFOUNDRY_API_KEY",

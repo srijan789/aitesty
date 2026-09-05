@@ -18,7 +18,13 @@ class ExplorerConfig:
     attempt_number: int = 1
 =======
     prd_text: Optional[str] = None
+<<<<<<< HEAD
 >>>>>>> 145374c (Added the Exploratory + test planning agent)
+=======
+    # Planner re-plan loop support (all optional/defaulted -> backward compatible)
+    coverage_feedback: List[str] = field(default_factory=list)
+    attempt_number: int = 1
+>>>>>>> 561a6cf (add an orchestrator at higher level)
 
 @dataclass
 class ScenarioStep:

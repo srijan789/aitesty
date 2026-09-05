@@ -187,11 +187,15 @@ class TestOrchestrator:
             test_case.set_steps(s.steps)
             db.session.add(test_case)
 <<<<<<< HEAD
+<<<<<<< HEAD
             db.session.flush()  # populate test_case.id so downstream stages can reference it
             scenario_dict = s.to_dict()
             scenario_dict["id"] = test_case.id
             scenarios_json_list.append(scenario_dict)
 =======
+=======
+            db.session.flush()  # populate test_case.id (and other defaults) before capturing it
+>>>>>>> 561a6cf (add an orchestrator at higher level)
             scenarios_json_list.append(test_case.to_dict())
 >>>>>>> 145374c (Added the Exploratory + test planning agent)
 

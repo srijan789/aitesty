@@ -50,6 +50,13 @@ class PipelineOrchestrator:
     ) -> PipelineRun:
         project = db.get_or_404(Project, project_id)
 
+<<<<<<< HEAD
+=======
+        # PRD is normally set once on the Project itself (see Project.prd_text); an explicit
+        # override passed to this call takes precedence over the project's stored PRD.
+        resolved_prd = product_requirements or project.prd_text
+
+>>>>>>> 561a6cf (add an orchestrator at higher level)
         pipeline_run = PipelineRun(
             project_id=project.id,
             status="queued",
@@ -57,7 +64,11 @@ class PipelineOrchestrator:
             trigger=trigger_source,
             max_replan_cycles=current_app.config.get("MAX_REPLAN_CYCLES", 2),
             max_heal_attempts=current_app.config.get("MAX_HEAL_ATTEMPTS", 3),
+<<<<<<< HEAD
             product_requirements=product_requirements,
+=======
+            product_requirements=resolved_prd,
+>>>>>>> 561a6cf (add an orchestrator at higher level)
             natural_language_intent=natural_language_intent,
         )
         db.session.add(pipeline_run)
@@ -201,7 +212,11 @@ class PipelineOrchestrator:
             scope_instructions=project.scope_instructions,
             workspace_dir=str(project_dir),
             run_id=run.id,
+<<<<<<< HEAD
             product_requirements=pipeline_run.product_requirements,
+=======
+            prd_text=pipeline_run.product_requirements,
+>>>>>>> 561a6cf (add an orchestrator at higher level)
             coverage_feedback=coverage_feedback,
             attempt_number=attempt_number,
         )

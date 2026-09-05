@@ -85,11 +85,16 @@ def test_full_exploration_and_test_execution_flow(client, app):
         assert plan_md_path.exists()
 
 <<<<<<< HEAD
+<<<<<<< HEAD
         # The Planner no longer writes test files itself -- that's the Generator stage's job,
         # so the workspace tests/ dir stays empty after exploration alone.
         assert list((ws_root / proj_id / "tests").glob("*")) == []
 =======
         # Explorer agent does NOT generate .spec.py files (decoupled from script authoring)
+=======
+        # Explorer agent does NOT generate .spec.py files (decoupled from script authoring) --
+        # that's the Generator stage's job.
+>>>>>>> 561a6cf (add an orchestrator at higher level)
         tests_dir = ws_root / proj_id / "tests"
         spec_files = list(tests_dir.glob("*.spec.py")) if tests_dir.exists() else []
         assert len(spec_files) == 0
@@ -159,7 +164,12 @@ def test_full_exploration_and_test_execution_flow(client, app):
     #    job (exercised together with the rest of the pipeline in test_pipeline_orchestrator.py).
 =======
     # 9. Trigger test execution when no spec files exist yet -> completes cleanly with warning
+<<<<<<< HEAD
 >>>>>>> 145374c (Added the Exploratory + test planning agent)
+=======
+    # (generating executable specs is the Generator stage's job, exercised together with the
+    # rest of the autonomous pipeline in test_pipeline_orchestrator.py)
+>>>>>>> 561a6cf (add an orchestrator at higher level)
     res = client.post(f"/api/projects/{proj_id}/execute-tests")
     assert res.status_code == 202
     test_run_id = res.get_json()["run_id"]
@@ -173,12 +183,18 @@ def test_full_exploration_and_test_execution_flow(client, app):
             test_completed = True
             assert run_status["status"] == "completed"
 <<<<<<< HEAD
+<<<<<<< HEAD
             stats = run_status["summary_stats"]
             assert stats["total"] == 0
             assert stats["passed"] == 0
 =======
             assert run_status["summary_stats"]["total"] == 0
 >>>>>>> 145374c (Added the Exploratory + test planning agent)
+=======
+            stats = run_status["summary_stats"]
+            assert stats["total"] == 0
+            assert stats["passed"] == 0
+>>>>>>> 561a6cf (add an orchestrator at higher level)
             break
 
     assert test_completed is True, "Test execution run did not complete in time"
