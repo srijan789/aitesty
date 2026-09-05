@@ -98,6 +98,15 @@ from unittest.mock import patch, MagicMock
 def test_test_runner_suite_and_file_execution(tmp_path):
     tests_dir = tmp_path / "tests"
     tests_dir.mkdir(parents=True, exist_ok=True)
+
+    conftest = tmp_path / "conftest.py"
+    conftest.write_text("""
+import pytest
+from unittest.mock import MagicMock
+@pytest.fixture
+def page():
+    return MagicMock()
+""", encoding="utf-8")
     
     # Create two test spec files
     spec1 = tests_dir / "test_auth.spec.py"
@@ -332,3 +341,21 @@ def test_01_view_cart(page):
         breakdown = {item["file_name"]: item["subtests_total"] for item in res3["summary"]["subtests_per_test"]}
         assert breakdown["test_auth.spec.py"] == 2
         assert breakdown["test_cart.spec.py"] == 1
+
+def test_classify_failure_with_actual_message():
+    err_msg = "AssertionError: expected 'Dashboard' but actual: 'Login'"
+    tb = "Traceback (most recent call last):\n  File 'test.py', line 10, in test_foo\n    assert False\nAssertionError: expected 'Dashboard' but actual: 'Login'"
+    res = classify_failure(err_msg, tb)
+    assert res["classification"] == FailureClassification.APP_DEFECT
+    assert res["subtype"] == FailureSubType.ASSERTION_FAILED
+    assert res["healing_context"]["actual"] == "'Login'"
+    assert res["healing_context"]["expected"] == "'Dashboard'"
+
+def test_classify_failure_with_word_actual_does_not_crash():
+    # Playwright assertion message containing the word 'actual'
+    err_msg = "AssertionError: Locator.expect: Element is actual value mismatch"
+    tb = "Traceback ... AssertionError: Locator.expect: Element is actual value mismatch"
+    # Previously crashed with AttributeError: 'NoneType' object has no attribute 'strip'
+    res = classify_failure(err_msg, tb)
+    assert res["classification"] == FailureClassification.APP_DEFECT
+    assert res["subtype"] == FailureSubType.ASSERTION_FAILED

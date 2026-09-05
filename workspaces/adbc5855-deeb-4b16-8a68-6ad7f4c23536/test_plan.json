@@ -1,34 +1,34 @@
 {
   "project_id": "adbc5855-deeb-4b16-8a68-6ad7f4c23536",
   "project_name": "n8n demo",
-  "version": 4,
+  "version": 5,
   "status": "active",
-  "summary": "Automated Test Plan for n8n demo (v4)",
+  "summary": "Automated Test Plan for n8n demo (v5)",
   "discovered_routes": [
     "http://localhost:5678",
-    "http://localhost:5678/home/credentials"
+    "http://localhost:5678/signin?redirect=%252F"
   ],
   "scenarios": [
     {
       "id": null,
-      "test_plan_id": "6cf761fc-5468-4120-8b14-c97caf9b6a29",
-      "title": "Initial Application Load & Core View Render (Credentials - n8n)",
+      "test_plan_id": "4411e54d-a260-4488-804a-53fc81f9403a",
+      "title": "Initial Application Load & Core View Render (n8n.io - Workflow Automation)",
       "category": "happy_path",
       "priority": "P0",
       "preconditions": "Browser launched with clean cookies and active internet connection.",
-      "description": "Validate that a visitor navigating to http://localhost:5678/home/credentials receives a valid HTTP 200 and primary views render without errors.",
+      "description": "\u26a0\ufe0f FALLBACK TEMPLATE: Validate that a visitor navigating to http://localhost:5678/signin?redirect=%252F receives a valid HTTP 200 and primary views render without errors.",
       "steps": [
         {
           "step_number": 1,
           "action": "Navigate",
-          "target_element": "http://localhost:5678/home/credentials",
+          "target_element": "http://localhost:5678/signin?redirect=%252F",
           "expected_outcome": "HTTP 200 response with DOM ready"
         },
         {
           "step_number": 2,
           "action": "Assert",
           "target_element": "body",
-          "expected_outcome": "Page title matches 'Credentials - n8n'"
+          "expected_outcome": "Page title matches 'n8n.io - Workflow Automation'"
         },
         {
           "step_number": 3,
@@ -48,17 +48,17 @@
     },
     {
       "id": null,
-      "test_plan_id": "6cf761fc-5468-4120-8b14-c97caf9b6a29",
+      "test_plan_id": "4411e54d-a260-4488-804a-53fc81f9403a",
       "title": "Input Boundary & Form Validation Probing",
       "category": "edge_case",
       "priority": "P1",
-      "preconditions": "Navigate to http://localhost:5678/home/credentials with accessible interactive forms.",
-      "description": "Probe input fields with boundary lengths (255+ characters), emojis, and whitespace-only submissions.",
+      "preconditions": "Navigate to http://localhost:5678/signin?redirect=%252F with accessible interactive forms.",
+      "description": "\u26a0\ufe0f FALLBACK TEMPLATE: Probe input fields with boundary lengths (255+ characters), emojis, and whitespace-only submissions.",
       "steps": [
         {
           "step_number": 1,
           "action": "Navigate",
-          "target_element": "http://localhost:5678/home/credentials",
+          "target_element": "http://localhost:5678/signin?redirect=%252F",
           "expected_outcome": "Form visible"
         },
         {
@@ -85,17 +85,17 @@
     },
     {
       "id": null,
-      "test_plan_id": "6cf761fc-5468-4120-8b14-c97caf9b6a29",
+      "test_plan_id": "4411e54d-a260-4488-804a-53fc81f9403a",
       "title": "Invalid Route & Error Boundary Handling",
       "category": "error_flow",
       "priority": "P1",
       "preconditions": "Standard unauthenticated user session.",
-      "description": "Verify graceful user feedback when navigating to a non-existent URL or encountering broken links.",
+      "description": "\u26a0\ufe0f FALLBACK TEMPLATE: Verify graceful user feedback when navigating to a non-existent URL or encountering broken links.",
       "steps": [
         {
           "step_number": 1,
           "action": "Navigate",
-          "target_element": "http://localhost:5678/home/credentials/non-existent-qa-route-404",
+          "target_element": "http://localhost:5678/signin?redirect=%252F/non-existent-qa-route-404",
           "expected_outcome": "Route requested"
         },
         {

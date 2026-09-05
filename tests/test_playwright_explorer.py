@@ -147,7 +147,26 @@ def test_playwright_explorer_qa_scenario_structure():
     assert "Pass / Fail Criteria" not in s_dict or s_dict["pass_fail_criteria"] is not None
     assert s_dict["pass_fail_criteria"].startswith("1. HTTP 200")
     assert s_dict["status"] == "pending_review"
+    assert s_dict["source"] == "llm"
     assert "suggested_spec_filename" not in s_dict
+
+def test_playwright_explorer_fallback_scenario_tagging():
+    agent = PlaywrightExplorerAgent()
+    cfg = ExplorerConfig(
+        project_id="p-fallback",
+        target_url="http://localhost:3000",
+        auth_type="none",
+        credentials={},
+        scope_instructions=None,
+        workspace_dir="/tmp/test",
+        run_id="run-fallback",
+    )
+    res = agent._synthesize_spec_only_plan(cfg, lambda lvl, msg, meta=None: None)
+    assert len(res.scenarios) > 0
+    for sc in res.scenarios:
+        assert sc.source == "fallback_template"
+        assert sc.description.startswith("⚠️ FALLBACK TEMPLATE")
+        assert sc.to_dict()["source"] == "fallback_template"
 
 def test_headless_and_slow_mo_configuration():
     # 1. Test PlaywrightController init options

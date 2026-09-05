@@ -41,6 +41,7 @@ class DiscoveredScenario:
     preconditions: Optional[str] = None
     pass_fail_criteria: Optional[str] = None
     status: str = "pending_review"
+    source: str = "llm"  # "llm" | "fallback_template"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -53,6 +54,7 @@ class DiscoveredScenario:
             "expected_result": self.expected_result,
             "pass_fail_criteria": self.pass_fail_criteria,
             "status": self.status,
+            "source": self.source,
         }
 
 @dataclass

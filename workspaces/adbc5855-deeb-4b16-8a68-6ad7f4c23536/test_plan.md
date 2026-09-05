@@ -1,20 +1,20 @@
-# Test Plan: Automated Test Plan for n8n demo (v4)
+# Test Plan: Automated Test Plan for n8n demo (v5)
 
-Version: 4 | Status: active
-Generated: 2026-09-05 10:35:10 UTC
+Version: 5 | Status: active
+Generated: 2026-09-05 10:52:10 UTC
 
 ## Discovered Scenarios
 
 ### ✅ Happy Path Scenarios
 
-#### [P0] Initial Application Load & Core View Render (Credentials - n8n) `(pending_review)`
-Validate that a visitor navigating to http://localhost:5678/home/credentials receives a valid HTTP 200 and primary views render without errors.
+#### [P0] Initial Application Load & Core View Render (n8n.io - Workflow Automation) `(pending_review)`
+⚠️ FALLBACK TEMPLATE: Validate that a visitor navigating to http://localhost:5678/signin?redirect=%252F receives a valid HTTP 200 and primary views render without errors.
 
 **Preconditions:** Browser launched with clean cookies and active internet connection.
 
 **Execution Steps:**
-1. Navigate on `http://localhost:5678/home/credentials` -> HTTP 200 response with DOM ready
-2. Assert on `body` -> Page title matches 'Credentials - n8n'
+1. Navigate on `http://localhost:5678/signin?redirect=%252F` -> HTTP 200 response with DOM ready
+2. Assert on `body` -> Page title matches 'n8n.io - Workflow Automation'
 3. Assert on `header, nav` -> Primary navigation elements rendered
 
 **Expected Output:** Application renders layout, navigation bar, and primary landing components.
@@ -27,12 +27,12 @@ FAIL: White screen, HTTP 4xx/5xx, or crash alert.
 ### ⚠️ Edge Cases & Boundary Conditions
 
 #### [P1] Input Boundary & Form Validation Probing `(pending_review)`
-Probe input fields with boundary lengths (255+ characters), emojis, and whitespace-only submissions.
+⚠️ FALLBACK TEMPLATE: Probe input fields with boundary lengths (255+ characters), emojis, and whitespace-only submissions.
 
-**Preconditions:** Navigate to http://localhost:5678/home/credentials with accessible interactive forms.
+**Preconditions:** Navigate to http://localhost:5678/signin?redirect=%252F with accessible interactive forms.
 
 **Execution Steps:**
-1. Navigate on `http://localhost:5678/home/credentials` -> Form visible
+1. Navigate on `http://localhost:5678/signin?redirect=%252F` -> Form visible
 2. Fill on `input` -> Enter string with special characters and boundary length
 3. Click on `button[type='submit']` -> Form triggers client or server validation
 
@@ -46,12 +46,12 @@ FAIL: Server 500 error, page crash, or raw SQL/exception leak.
 ### 🛑 Error Handling & Negative Flows
 
 #### [P1] Invalid Route & Error Boundary Handling `(pending_review)`
-Verify graceful user feedback when navigating to a non-existent URL or encountering broken links.
+⚠️ FALLBACK TEMPLATE: Verify graceful user feedback when navigating to a non-existent URL or encountering broken links.
 
 **Preconditions:** Standard unauthenticated user session.
 
 **Execution Steps:**
-1. Navigate on `http://localhost:5678/home/credentials/non-existent-qa-route-404` -> Route requested
+1. Navigate on `http://localhost:5678/signin?redirect=%252F/non-existent-qa-route-404` -> Route requested
 2. Assert on `body` -> Clean 404 error page displayed with Home link
 
 **Expected Output:** Custom 404 page is displayed with navigation to return home.

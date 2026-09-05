@@ -1,5 +1,6 @@
 import os
 import sys
+import subprocess
 import re
 import ast
 import time
@@ -344,129 +345,148 @@ class TestRunner:
             self._write_test_log_file(out)
             return out
 
-        # 2. Server is online: Execute real Playwright browser test or real HTTP probe
+        # 2. Server is online: Execute real pytest against the specific generated file/test
+        test_spec = f"{file_path}::{test_name}" if test_name and test_name.startswith("test_") else str(file_path)
+        cmd = [
+            sys.executable,
+            "-m",
+            "pytest",
+            test_spec,
+            "--import-mode=importlib",
+            "-s",
+        ]
+        if not self.headless:
+            cmd.append("--headed")
+
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(self.workspace_dir) + (os.pathsep + env.get("PYTHONPATH", ""))
+        if self.target_url:
+            env["BASE_URL"] = self.target_url
+            env["TARGET_URL"] = self.target_url
+
+        t0 = time.time()
         try:
-            code_lines = file_path.read_text(encoding="utf-8").split("\n")
-            in_func = False
-            func_lines = []
-            for line in code_lines:
-                if f"def {test_name}" in line:
-                    in_func = True
-                    continue
-                if in_func:
-                    if line.startswith("def ") or (line and not line.startswith(" ") and not line.startswith("\t")):
-                        break
-                    func_lines.append(line)
+            test_cb("INFO", f"    [Subprocess] Running pytest {test_spec} (--import-mode=importlib)...")
+            proc = subprocess.run(
+                cmd,
+                cwd=str(self.workspace_dir),
+                capture_output=True,
+                text=True,
+                timeout=120,
+                env=env,
+            )
+            dur = int((time.time() - t0) * 1000)
+            stdout = proc.stdout or ""
+            stderr = proc.stderr or ""
+            full_output = (stdout + "\n" + stderr).strip()
 
-            step_lines = [l.strip() for l in func_lines if "[STEP " in l or "# Step" in l]
+            # Parse step breadcrumbs from output: [STEP <num>] <action>
+            step_lines = [l.strip() for l in stdout.splitlines() if "[STEP " in l or "# Step" in l]
+            for idx, st in enumerate(step_lines, 1):
+                match = re.search(r'\[STEP\s*(\d+)\]\s*(.*)', st)
+                if match:
+                    s_num = int(match.group(1))
+                    s_desc = match.group(2).strip()
+                else:
+                    s_num = idx
+                    s_desc = st.strip()
+                action = "Navigate" if "navigate" in s_desc.lower() else ("Assert" if "assert" in s_desc.lower() or "verify" in s_desc.lower() else "Action")
+                telemetry.log_step(
+                    step_number=s_num,
+                    action=action,
+                    target=s_desc[:60],
+                    outcome="Executed",
+                    duration_ms=max(1, dur // max(len(step_lines), 1)),
+                )
+                test_cb("INFO", f"    [Step {s_num}] {action} -> {s_desc[:80]}")
+
             if not step_lines:
-                step_lines = [
-                    f"[STEP 1] Navigate to {self.target_url}",
-                    "[STEP 2] Verify response status and layout",
-                ]
+                telemetry.log_step(
+                    step_number=1,
+                    action="Pytest",
+                    target=test_name,
+                    outcome=f"Exit code: {proc.returncode}",
+                    duration_ms=dur,
+                )
 
-            # Try launching Playwright for live browser execution
-            browser_executed = False
-            try:
-                from playwright.sync_api import sync_playwright
-                with sync_playwright() as p:
-                    browser = p.chromium.launch(
-                        headless=self.headless,
-                        slow_mo=self.slow_mo,
-                        args=["--no-sandbox", "--disable-dev-shm-usage"],
-                    )
-                    mode_label = "headless" if self.headless else f"headed (slow_mo: {self.slow_mo}ms)"
-                    test_cb("INFO", f"    [Browser] Chromium running in {mode_label} mode")
-                    context = browser.new_context(ignore_https_errors=True)
-                    page = context.new_page()
-                    page.set_default_timeout(8000)
+            # Check if screenshot was captured by the spec's own screenshot code
+            screenshot_path = None
+            screenshot_match = re.search(r"\[FAILURE\] Diagnostic screenshot captured at\s+([^\s\n]+)", full_output)
+            if screenshot_match:
+                candidate = Path(screenshot_match.group(1).strip())
+                if not candidate.is_absolute():
+                    candidate = self.workspace_dir / candidate
+                if candidate.exists():
+                    screenshot_path = str(candidate)
 
-                    # Diagnostic Listeners for Results Analysis & Healer Agent
-                    page.on("console", lambda msg: telemetry.log_console(msg.type, msg.text, str(msg.location)))
-                    page.on("pageerror", lambda err: telemetry.log_console("error", f"Uncaught page exception: {err}"))
-                    page.on("response", lambda res: telemetry.log_network(res.request.method, res.url, res.status))
+            if not screenshot_path:
+                for potential_dir in [self.screenshots_dir, self.workspace_dir / "test-results" / "screenshots"]:
+                    if potential_dir.exists():
+                        matching = list(potential_dir.glob(f"*{test_name}*.png")) or list(potential_dir.glob("*.png"))
+                        if matching:
+                            newest = max(matching, key=lambda p: p.stat().st_mtime)
+                            if time.time() - newest.stat().st_mtime < 130:
+                                screenshot_path = str(newest)
+                                break
 
-                    # Step 1: Navigate to target URL
-                    t0 = time.time()
-                    res = page.goto(self.target_url, wait_until="domcontentloaded", timeout=7000)
-                    nav_dur = int((time.time() - t0) * 1000)
+            if proc.returncode == 0:
+                telemetry.mark_passed()
+                test_cb("INFO", f"    [PASS] {test_name} passed ({dur}ms)")
+            else:
+                error_lines = [l[2:].strip() if l.startswith("E ") else l.strip() for l in stdout.splitlines() if l.startswith("E   ") or l.startswith("E ")]
+                error_message = "\n".join(error_lines) if error_lines else ""
+                if not error_message:
+                    fail_lines = [l.strip() for l in stdout.splitlines() if "FAILED " in l or "AssertionError" in l or "Error:" in l]
+                    error_message = "\n".join(fail_lines) if fail_lines else (stderr.strip() or stdout.strip()[-500:])
 
-                    if not res or res.status >= 400:
-                        raise AssertionError(f"Page navigation to {self.target_url} returned HTTP status {res.status if res else 'None'}")
+                classification = classify_failure(
+                    error_message=error_message,
+                    traceback_str=full_output,
+                    page_url=self.target_url,
+                )
+                telemetry.mark_failed(
+                    error_message=error_message,
+                    traceback_str=full_output,
+                    screenshot_path=screenshot_path,
+                    page_url=self.target_url,
+                    classification_data=classification,
+                )
+                test_cb("ERROR", f"    [FAIL] {test_name}: {error_message[:120]}")
 
-                    telemetry.log_step(1, "Navigate", self.target_url, f"HTTP {res.status} loaded", nav_dur)
-                    test_cb("INFO", f"    [Step 1] Navigate -> {self.target_url} (HTTP {res.status})")
-
-                    # Step 2: Element checks
-                    t1 = time.time()
-                    page.wait_for_selector("body", timeout=4000)
-                    body_dur = int((time.time() - t1) * 1000)
-                    telemetry.log_step(2, "Assert", "body", f"DOM rendered ({page.title()})", body_dur)
-                    test_cb("INFO", f"    [Step 2] Assert -> body visible, Title: '{page.title()}'")
-
-                    # Scan interactive DOM elements for healer context
-                    try:
-                        candidates = page.evaluate("""() => {
-                            const els = Array.from(document.querySelectorAll('button, input, a, [role="button"], select, textarea'));
-                            return els.slice(0, 25).map(el => ({
-                                tag: el.tagName.toLowerCase(),
-                                id: el.id || '',
-                                name: el.getAttribute('name') || '',
-                                text: (el.innerText || el.textContent || el.value || '').trim().slice(0, 50),
-                                role: el.getAttribute('role') || '',
-                                type: el.getAttribute('type') || '',
-                                testid: el.getAttribute('data-testid') || el.getAttribute('data-test') || '',
-                            }));
-                        }""")
-                        telemetry.set_dom_context(page.content()[:2000], candidates)
-                        telemetry.log_debug("DEBUG", f"Scanned live DOM: {len(candidates)} candidate elements indexed.")
-                    except Exception:
-                        pass
-
-                    browser.close()
-                    browser_executed = True
-            except Exception as browser_err:
-                err_str = str(browser_err).lower()
-                # If the error is an actual network / connection refused or assertion error from Playwright:
-                if "connection refused" in err_str or "err_connection_refused" in err_str or "assertion" in err_str:
-                    raise browser_err
-                
-                # If Playwright browser launch is blocked by OS environment permissions (macOS Mach port sandbox):
-                # Fall back to live HTTP verification so real network checks still run and verify target app!
-            if not browser_executed:
-                # Real HTTP validation against target server
-                t0 = time.time()
-                resp = requests.get(self.target_url, timeout=5, allow_redirects=True)
-                dur = int((time.time() - t0) * 1000)
-                resp_preview = resp.text[:200] if hasattr(resp, "text") and isinstance(resp.text, str) else ""
-                telemetry.log_network("GET", self.target_url, getattr(resp, "status_code", 200), dur, resp_preview)
-
-                if resp.status_code >= 400:
-                    raise AssertionError(f"Target URL {self.target_url} returned HTTP {resp.status_code}")
-
-                for idx, st in enumerate(step_lines, 1):
-                    clean_step = re.sub(r'print\(f?["\']\[STEP \d+\]\s*', '', st).rstrip('"\')')
-                    action = "Navigate" if idx == 1 else "Assert"
-                    telemetry.log_step(
-                        step_number=idx,
-                        action=action,
-                        target=self.target_url if action == "Navigate" else clean_step[:40],
-                        outcome=f"HTTP {resp.status_code} - Verified Live Response",
-                        duration_ms=dur,
-                    )
-                    test_cb("INFO", f"    [Step {idx}] {action} -> {clean_step[:60]}")
-
-            telemetry.mark_passed()
-
-        except Exception as exc:
-            tb = traceback.format_exc()
-            screenshot_path = str(self.screenshots_dir / f"{test_name}_failure.png")
-            telemetry.mark_failed(
-                error_message=str(exc),
-                traceback_str=tb,
-                screenshot_path=screenshot_path if os.path.exists(screenshot_path) else None,
+        except subprocess.TimeoutExpired:
+            dur = int((time.time() - t0) * 1000)
+            err_msg = f"Test execution timed out after 120s: {test_name}"
+            test_cb("ERROR", f"    [TIMEOUT] {err_msg}")
+            classification = classify_failure(
+                error_message=err_msg,
+                traceback_str=err_msg,
                 page_url=self.target_url,
             )
+            telemetry.mark_failed(
+                error_message=err_msg,
+                traceback_str=err_msg,
+                screenshot_path=None,
+                page_url=self.target_url,
+                classification_data=classification,
+            )
+        except Exception as exc:
+            dur = int((time.time() - t0) * 1000)
+            tb = traceback.format_exc()
+            err_msg = str(exc)
+            test_cb("ERROR", f"    [ERROR] Failed to execute {test_name}: {err_msg}")
+            classification = classify_failure(
+                error_message=err_msg,
+                traceback_str=tb,
+                page_url=self.target_url,
+            )
+            telemetry.mark_failed(
+                error_message=err_msg,
+                traceback_str=tb,
+                screenshot_path=None,
+                page_url=self.target_url,
+                classification_data=classification,
+            )
+
 
         out = telemetry.to_dict()
         out["file_name"] = file_path.name

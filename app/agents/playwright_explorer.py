@@ -1,4 +1,5 @@
 import os
+import time
 import json
 import logging
 from pathlib import Path
@@ -259,8 +260,8 @@ Begin your exploration using the browser tools. Explore key routes, test form in
 
                 messages.append({"role": "user", "content": user_init_content})
 
-                # ReAct Tool-Calling Loop (Max 12 iterations)
-                max_iterations = 12
+                # ReAct Tool-Calling Loop (Max 20 iterations)
+                max_iterations = 20
                 iteration = 0
                 final_result: Optional[ExplorerResult] = None
 
@@ -269,22 +270,40 @@ Begin your exploration using the browser tools. Explore key routes, test form in
                     if is_cancelled():
                         return ExplorerResult(status="cancelled")
 
+                    # "Wrap up now" nudge 2 turns before the cap
+                    if iteration == max_iterations - 2:
+                        log_callback("INFO", f"Approaching turn limit ({iteration}/{max_iterations}). Nudging agent to wrap up exploration.")
+                        messages.append({
+                            "role": "user",
+                            "content": "You are approaching the exploration turn budget. Please wrap up your findings and call `finish_exploration` with all discovered scenarios now."
+                        })
+
                     log_callback("INFO", f"[Agent Thinking] Iteration {iteration}/{max_iterations} - Querying Gemini 3.7 Flash...")
 
-                    try:
-                        response = client.chat.completions.create(
-                            model=self.model,
-                            messages=messages,
-                            tools=PLAYWRIGHT_MCP_TOOLS,
-                            tool_choice="auto",
-                            extra_headers={
-                                "X-TFY-METADATA": "{}",
-                                "X-TFY-LOGGING-CONFIG": '{"enabled": true}',
-                            },
-                        )
-                    except Exception as llm_err:
-                        log_callback("WARN", f"LLM Gateway response notice: {llm_err}. Using autonomous heuristic fallback.")
-                        return self._fallback_exploration(config, controller, log_callback, is_cancelled)
+                    # Retry-with-backoff around the LLM call (2 attempts)
+                    response = None
+                    max_llm_attempts = 2
+                    for attempt in range(1, max_llm_attempts + 1):
+                        try:
+                            response = client.chat.completions.create(
+                                model=self.model,
+                                messages=messages,
+                                tools=PLAYWRIGHT_MCP_TOOLS,
+                                tool_choice="auto",
+                                extra_headers={
+                                    "X-TFY-METADATA": "{}",
+                                    "X-TFY-LOGGING-CONFIG": '{"enabled": true}',
+                                },
+                            )
+                            break
+                        except Exception as llm_err:
+                            if attempt < max_llm_attempts:
+                                backoff_sec = 2.0 * attempt
+                                log_callback("WARN", f"LLM Gateway response notice (attempt {attempt}/{max_llm_attempts}): {llm_err}. Retrying in {backoff_sec}s...")
+                                time.sleep(backoff_sec)
+                            else:
+                                log_callback("WARN", f"LLM Gateway failed after {max_llm_attempts} attempts: {llm_err}. Using autonomous heuristic fallback.")
+                                return self._fallback_exploration(config, controller, log_callback, is_cancelled)
 
                     message = response.choices[0].message
                     messages.append(message)
@@ -311,6 +330,8 @@ Begin your exploration using the browser tools. Explore key routes, test form in
                         fn_args = {}
                         try:
                             fn_args = json.loads(tool_call.function.arguments)
+                            if isinstance(fn_args, str):
+                                fn_args = json.loads(fn_args)
                         except Exception:
                             pass
 
@@ -458,12 +479,48 @@ TEST DEFINITION GUIDELINES:
         artifacts_created: List[str],
         log_callback: Callable,
     ) -> ExplorerResult:
+        if isinstance(fn_args, str):
+            try:
+                fn_args = json.loads(fn_args)
+            except Exception:
+                fn_args = {}
+
         summary = fn_args.get("summary", "QA exploration completed successfully.")
         discovered_routes = fn_args.get("discovered_routes", [config.target_url])
+        if isinstance(discovered_routes, str):
+            try:
+                discovered_routes = json.loads(discovered_routes)
+            except Exception:
+                discovered_routes = [discovered_routes]
+        if not isinstance(discovered_routes, list):
+            discovered_routes = [str(discovered_routes)]
+
         raw_scenarios = fn_args.get("scenarios", [])
+        if isinstance(raw_scenarios, str):
+            try:
+                raw_scenarios = json.loads(raw_scenarios)
+            except Exception:
+                raw_scenarios = []
+        if not isinstance(raw_scenarios, list):
+            raw_scenarios = []
 
         scenarios: List[DiscoveredScenario] = []
         for s in raw_scenarios:
+            if isinstance(s, str):
+                try:
+                    s = json.loads(s)
+                except Exception:
+                    continue
+            if not isinstance(s, dict):
+                continue
+
+            steps = s.get("steps", [])
+            if isinstance(steps, str):
+                try:
+                    steps = json.loads(steps)
+                except Exception:
+                    steps = []
+
             scenarios.append(
                 DiscoveredScenario(
                     title=s.get("title", "Scenario"),
@@ -471,10 +528,11 @@ TEST DEFINITION GUIDELINES:
                     priority=s.get("priority", "P1"),
                     preconditions=s.get("preconditions", f"Target application loaded at {config.target_url}"),
                     description=s.get("description", ""),
-                    steps=s.get("steps", []),
+                    steps=steps if isinstance(steps, list) else [],
                     expected_result=s.get("expected_result", "Pass"),
                     pass_fail_criteria=s.get("pass_fail_criteria", "Pass if all execution steps succeed without UI error or network failure."),
                     status="pending_review",
+                    source="llm",
                 )
             )
 
@@ -486,6 +544,7 @@ TEST DEFINITION GUIDELINES:
             discovered_routes=discovered_routes,
             artifacts_created=artifacts_created,
         )
+
 
     def _synthesize_from_state(
         self,
@@ -506,7 +565,7 @@ TEST DEFINITION GUIDELINES:
                 category="happy_path",
                 priority="P0",
                 preconditions="Browser launched with clean cookies and active internet connection.",
-                description=f"Validate that a visitor navigating to {url} receives a valid HTTP 200 and primary views render without errors.",
+                description=f"⚠️ FALLBACK TEMPLATE: Validate that a visitor navigating to {url} receives a valid HTTP 200 and primary views render without errors.",
                 steps=[
                     {"step_number": 1, "action": "Navigate", "target_element": url, "expected_outcome": "HTTP 200 response with DOM ready"},
                     {"step_number": 2, "action": "Assert", "target_element": "body", "expected_outcome": f"Page title matches '{title}'"},
@@ -515,13 +574,14 @@ TEST DEFINITION GUIDELINES:
                 expected_result="Application renders layout, navigation bar, and primary landing components.",
                 pass_fail_criteria="PASS: HTTP status is 200, page loads within 5s, zero uncaught JS console errors.\nFAIL: White screen, HTTP 4xx/5xx, or crash alert.",
                 status="pending_review",
+                source="fallback_template",
             ),
             DiscoveredScenario(
                 title="Input Boundary & Form Validation Probing",
                 category="edge_case",
                 priority="P1",
                 preconditions=f"Navigate to {url} with accessible interactive forms.",
-                description="Probe input fields with boundary lengths (255+ characters), emojis, and whitespace-only submissions.",
+                description="⚠️ FALLBACK TEMPLATE: Probe input fields with boundary lengths (255+ characters), emojis, and whitespace-only submissions.",
                 steps=[
                     {"step_number": 1, "action": "Navigate", "target_element": url, "expected_outcome": "Form visible"},
                     {"step_number": 2, "action": "Fill", "target_element": "input", "expected_outcome": "Enter string with special characters and boundary length"},
@@ -530,13 +590,14 @@ TEST DEFINITION GUIDELINES:
                 expected_result="Client or server validates input gracefully without exposing stack traces.",
                 pass_fail_criteria="PASS: Validation banner or field error is displayed, input is sanitized.\nFAIL: Server 500 error, page crash, or raw SQL/exception leak.",
                 status="pending_review",
+                source="fallback_template",
             ),
             DiscoveredScenario(
                 title="Invalid Route & Error Boundary Handling",
                 category="error_flow",
                 priority="P1",
                 preconditions="Standard unauthenticated user session.",
-                description="Verify graceful user feedback when navigating to a non-existent URL or encountering broken links.",
+                description="⚠️ FALLBACK TEMPLATE: Verify graceful user feedback when navigating to a non-existent URL or encountering broken links.",
                 steps=[
                     {"step_number": 1, "action": "Navigate", "target_element": f"{url.rstrip('/')}/non-existent-qa-route-404", "expected_outcome": "Route requested"},
                     {"step_number": 2, "action": "Assert", "target_element": "body", "expected_outcome": "Clean 404 error page displayed with Home link"},
@@ -544,6 +605,7 @@ TEST DEFINITION GUIDELINES:
                 expected_result="Custom 404 page is displayed with navigation to return home.",
                 pass_fail_criteria="PASS: User-friendly 404 message visible, back to safety link functional.\nFAIL: Raw web server debug page, unhandled exception, or blank screen.",
                 status="pending_review",
+                source="fallback_template",
             ),
         ]
 
@@ -573,7 +635,7 @@ TEST DEFINITION GUIDELINES:
                 category="happy_path",
                 priority="P0",
                 preconditions="User account exists with configured credentials.",
-                description="Verify that valid credentials authenticate successfully and redirect to the dashboard.",
+                description="⚠️ FALLBACK TEMPLATE: Verify that valid credentials authenticate successfully and redirect to the dashboard.",
                 steps=[
                     {"step_number": 1, "action": "Navigate", "target_element": f"{config.target_url.rstrip('/')}/login", "expected_outcome": "Login page renders"},
                     {"step_number": 2, "action": "Fill", "target_element": "input[name='username']", "expected_outcome": config.credentials.get("username", "admin")},
@@ -583,13 +645,14 @@ TEST DEFINITION GUIDELINES:
                 expected_result="Session established, redirects to dashboard with welcome banner.",
                 pass_fail_criteria="PASS: Auth cookie/token set, redirected to dashboard URL, user greeting displayed.\nFAIL: Remains on login page, 401 response without message, or 500 error.",
                 status="pending_review",
+                source="fallback_template",
             ),
             DiscoveredScenario(
                 title="PRD Feature Verification" if has_prd else "Core Navigation & Route Mapping",
                 category="happy_path",
                 priority="P1",
                 preconditions="User authenticated with standard permissions.",
-                description=f"Validate functional requirements specified in {'PRD' if has_prd else 'application discovery'}.",
+                description=f"⚠️ FALLBACK TEMPLATE: Validate functional requirements specified in {'PRD' if has_prd else 'application discovery'}.",
                 steps=[
                     {"step_number": 1, "action": "Navigate", "target_element": config.target_url, "expected_outcome": "Main view loaded"},
                     {"step_number": 2, "action": "Click", "target_element": "nav a", "expected_outcome": "Navigates to primary feature section"},
@@ -597,13 +660,14 @@ TEST DEFINITION GUIDELINES:
                 expected_result="Feature view renders without JS exceptions or broken assets.",
                 pass_fail_criteria="PASS: Target feature components load and are interactive.\nFAIL: Broken layout, missing components, or console errors.",
                 status="pending_review",
+                source="fallback_template",
             ),
             DiscoveredScenario(
                 title="Input Boundary & Form Validation",
                 category="edge_case",
                 priority="P2",
                 preconditions="Form loaded with clean input fields.",
-                description="Submit forms with empty values, boundary length strings, and special characters.",
+                description="⚠️ FALLBACK TEMPLATE: Submit forms with empty values, boundary length strings, and special characters.",
                 steps=[
                     {"step_number": 1, "action": "Navigate", "target_element": config.target_url, "expected_outcome": "Form loaded"},
                     {"step_number": 2, "action": "Fill", "target_element": "input", "expected_outcome": "Boundary and special character inputs"},
@@ -612,13 +676,14 @@ TEST DEFINITION GUIDELINES:
                 expected_result="Form validation prevents invalid submission with descriptive error prompts.",
                 pass_fail_criteria="PASS: Inline validation prompt highlights invalid fields.\nFAIL: Form submits invalid data or triggers unhandled server exception.",
                 status="pending_review",
+                source="fallback_template",
             ),
             DiscoveredScenario(
                 title="Invalid Authentication & 404 Handling",
                 category="error_flow",
                 priority="P1",
                 preconditions="Unauthenticated session.",
-                description="Verify that invalid credentials display an explicit error banner and non-existent routes show 404.",
+                description="⚠️ FALLBACK TEMPLATE: Verify that invalid credentials display an explicit error banner and non-existent routes show 404.",
                 steps=[
                     {"step_number": 1, "action": "Navigate", "target_element": f"{config.target_url.rstrip('/')}/login", "expected_outcome": "Login page loaded"},
                     {"step_number": 2, "action": "Fill", "target_element": "input[name='username']", "expected_outcome": "invalid_test_user"},
@@ -628,8 +693,10 @@ TEST DEFINITION GUIDELINES:
                 expected_result="User remains unauthenticated with clear feedback.",
                 pass_fail_criteria="PASS: Explicit error message 'Invalid credentials' displayed.\nFAIL: User logged in, blank screen, or unhandled 500 error.",
                 status="pending_review",
+                source="fallback_template",
             ),
         ]
+
 
         return ExplorerResult(
             status="success",

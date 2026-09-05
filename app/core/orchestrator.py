@@ -12,6 +12,7 @@ from app.core.workspace import WorkspaceManager
 from app.core.task_runner import task_runner
 from app.agents.base import ExplorerConfig
 from app.agents.registry import get_explorer_agent
+from app.core.coverage_critic import CoverageCritic
 
 logger = logging.getLogger(__name__)
 
@@ -101,37 +102,69 @@ class TestOrchestrator:
         if slow_mo is None:
             slow_mo = current_app.config.get("PLAYWRIGHT_SLOW_MO", 500 if not headless else 0)
 
-        config = ExplorerConfig(
-            project_id=project.id,
-            target_url=project.target_url,
-            auth_type=project.auth_type,
-            credentials=project.get_credentials(),
-            scope_instructions=project.scope_instructions,
-            workspace_dir=str(project_dir),
-            run_id=run.id,
-            prd_text=project.prd_text,
-            headless=headless,
-            slow_mo=slow_mo,
-        )
+        critic = CoverageCritic(max_retries=2)
+        retry_count = 0
+        current_scope = project.scope_instructions or ""
+        critic_result = None
+        has_creds = bool(project.get_credentials() or (project.auth_type and project.auth_type != "none"))
 
-        result = agent.explore(
-            config=config,
-            log_callback=log_callback,
-            cancel_check=cancel_event.is_set,
-        )
+        while True:
+            config = ExplorerConfig(
+                project_id=project.id,
+                target_url=project.target_url,
+                auth_type=project.auth_type,
+                credentials=project.get_credentials(),
+                scope_instructions=current_scope,
+                workspace_dir=str(project_dir),
+                run_id=run.id,
+                prd_text=project.prd_text,
+                headless=headless,
+                slow_mo=slow_mo,
+            )
 
-        if result.status == "cancelled":
-            log_callback("WARN", "Exploration run was cancelled.")
-            run.status = "cancelled"
-            db.session.commit()
-            return
+            result = agent.explore(
+                config=config,
+                log_callback=log_callback,
+                cancel_check=cancel_event.is_set,
+            )
 
-        if result.status == "failed":
-            log_callback("ERROR", f"Exploration failed: {result.error_message}")
-            run.status = "failed"
-            run.error_message = result.error_message
-            db.session.commit()
-            return
+            if result.status == "cancelled":
+                log_callback("WARN", "Exploration run was cancelled.")
+                run.status = "cancelled"
+                db.session.commit()
+                return
+
+            if result.status == "failed":
+                log_callback("ERROR", f"Exploration failed: {result.error_message}")
+                run.status = "failed"
+                run.error_message = result.error_message
+                db.session.commit()
+                return
+
+            # Evaluate with CoverageCritic
+            critic_result = critic.evaluate(
+                scenarios=result.scenarios,
+                has_credentials=has_creds,
+                retry_count=retry_count,
+            )
+
+            log_callback(
+                "INFO",
+                f"[Coverage Critic] Verdict: {critic_result.verdict.upper()} (Score: {critic_result.score:.2f}). "
+                f"Gaps: {len(critic_result.gaps)} detected. Feedback: {critic_result.feedback}"
+            )
+
+            if critic_result.verdict == "re_explore" and retry_count < 2:
+                retry_count += 1
+                log_callback("INFO", f"[Coverage Critic] Triggering re-exploration attempt {retry_count}/2 with targeted feedback...")
+                current_scope = (project.scope_instructions or "") + f"\n\n[Coverage Critic Feedback (Attempt {retry_count})]: {critic_result.feedback}"
+                continue
+
+            if critic_result.verdict == "escalate":
+                log_callback("WARN", f"[Coverage Critic] Escalated: {critic_result.feedback}")
+
+            break
+
 
         # Exploration Succeeded: Ingest into database models & workspace files
         log_callback("INFO", "Persisting test plan and scenarios to database and workspace filesystem...")
@@ -191,6 +224,11 @@ class TestOrchestrator:
             "edge_case": sum(1 for s in result.scenarios if s.category == "edge_case"),
             "error_flow": sum(1 for s in result.scenarios if s.category == "error_flow"),
             "routes_discovered": len(result.discovered_routes),
+            "critic_verdict": critic_result.verdict if critic_result else "proceed",
+            "critic_score": critic_result.score if critic_result else 1.0,
+            "coverage_gaps": critic_result.gaps if critic_result else [],
+            "critic_feedback": critic_result.feedback if critic_result else "",
+            "re_explore_count": retry_count,
         }
         run.set_summary_stats(stats)
         run.status = "completed"

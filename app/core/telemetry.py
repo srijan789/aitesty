@@ -118,9 +118,9 @@ def classify_failure(
     # 3. Check for Assertion Failure (App defect or semantic regression)
     if "assertionerror" in tb_lower or "assert" in err_lower:
         expected_match = re.search(r"expected:?\s*(.*?)(?:to|but|\n|$)", error_message, re.IGNORECASE)
-        actual_match = re.search(r"actual|received:?\s*(.*?)(?:\n|$)", error_message, re.IGNORECASE)
-        expected_val = expected_match.group(1).strip() if expected_match else None
-        actual_val = actual_match.group(1).strip() if actual_match else None
+        actual_match = re.search(r"(?:actual|received):?\s*(.*?)(?:\n|$)", error_message, re.IGNORECASE)
+        expected_val = expected_match.group(1).strip() if (expected_match and expected_match.group(1)) else None
+        actual_val = actual_match.group(1).strip() if (actual_match and actual_match.group(1)) else None
 
         return {
             "classification": FailureClassification.APP_DEFECT,
