@@ -226,8 +226,11 @@ class PlaywrightExplorerAgent(BaseExplorerAgent):
 
         # Start Playwright Browser Controller
         try:
-            with PlaywrightController(headless=True) as controller:
-                log_callback("INFO", "Chromium browser started with network sniffer & console listener attached.")
+            headless = getattr(config, "headless", True)
+            slow_mo = getattr(config, "slow_mo", 500 if not headless else 0)
+            with PlaywrightController(headless=headless, slow_mo=slow_mo) as controller:
+                mode_label = "headless" if headless else f"headed (slow_mo: {slow_mo}ms)"
+                log_callback("INFO", f"Chromium browser started [{mode_label}] with network sniffer & console listener attached.")
 
                 # Initial Navigation
                 log_callback("INFO", f"Navigating to initial target URL: {config.target_url}")

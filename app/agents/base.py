@@ -12,6 +12,8 @@ class ExplorerConfig:
     workspace_dir: str
     run_id: str
     prd_text: Optional[str] = None
+    headless: bool = True
+    slow_mo: int = 0
 
 @dataclass
 class ScenarioStep:

@@ -27,11 +27,21 @@ class TestRunner:
     """
     __test__ = False
 
-    def __init__(self, workspace_dir: str, project_id: str, run_id: str, target_url: str = ""):
+    def __init__(
+        self,
+        workspace_dir: str,
+        project_id: str,
+        run_id: str,
+        target_url: str = "",
+        headless: bool = True,
+        slow_mo: int = 0,
+    ):
         self.workspace_dir = Path(workspace_dir).resolve()
         self.project_id = project_id
         self.run_id = run_id
         self.target_url = target_url
+        self.headless = headless
+        self.slow_mo = slow_mo if (slow_mo > 0 or headless) else 500
         self.tests_dir = self.workspace_dir / "tests"
         self.runs_dir = self.workspace_dir / "runs" / run_id
         self.screenshots_dir = self.runs_dir / "screenshots"
@@ -360,7 +370,13 @@ class TestRunner:
             try:
                 from playwright.sync_api import sync_playwright
                 with sync_playwright() as p:
-                    browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
+                    browser = p.chromium.launch(
+                        headless=self.headless,
+                        slow_mo=self.slow_mo,
+                        args=["--no-sandbox", "--disable-dev-shm-usage"],
+                    )
+                    mode_label = "headless" if self.headless else f"headed (slow_mo: {self.slow_mo}ms)"
+                    test_cb("INFO", f"    [Browser] Chromium running in {mode_label} mode")
                     context = browser.new_context(ignore_https_errors=True)
                     page = context.new_page()
                     page.set_default_timeout(8000)

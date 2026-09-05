@@ -149,3 +149,47 @@ def test_playwright_explorer_qa_scenario_structure():
     assert s_dict["status"] == "pending_review"
     assert "suggested_spec_filename" not in s_dict
 
+def test_headless_and_slow_mo_configuration():
+    # 1. Test PlaywrightController init options
+    ctrl = PlaywrightController(headless=False, slow_mo=500)
+    assert ctrl.headless is False
+    assert ctrl.slow_mo == 500
+
+    # 2. Test ExplorerConfig fields
+    cfg = ExplorerConfig(
+        project_id="test-p",
+        target_url="http://localhost:3000",
+        auth_type="none",
+        credentials={},
+        scope_instructions=None,
+        workspace_dir="/tmp/test",
+        run_id="run-1",
+        headless=False,
+        slow_mo=500,
+    )
+    assert cfg.headless is False
+    assert cfg.slow_mo == 500
+
+    # 3. Test TestRunner init options
+    from app.core.test_runner import TestRunner
+    runner = TestRunner(
+        workspace_dir="/tmp/test",
+        project_id="test-p",
+        run_id="run-1",
+        headless=False,
+        slow_mo=750,
+    )
+    assert runner.headless is False
+    assert runner.slow_mo == 750
+
+    # Test default slow_mo fallback for headed mode
+    runner_default_slowmo = TestRunner(
+        workspace_dir="/tmp/test",
+        project_id="test-p",
+        run_id="run-1",
+        headless=False,
+        slow_mo=0,
+    )
+    assert runner_default_slowmo.headless is False
+    assert runner_default_slowmo.slow_mo == 500
+

@@ -27,7 +27,13 @@ class TestOrchestrator:
         return WorkspaceManager(workspaces_root)
 
     @classmethod
-    def trigger_exploration(cls, project_id: str, trigger_source: str = "manual") -> TestRun:
+    def trigger_exploration(
+        cls,
+        project_id: str,
+        trigger_source: str = "manual",
+        headless: Optional[bool] = None,
+        slow_mo: Optional[int] = None,
+    ) -> TestRun:
         project = db.get_or_404(Project, project_id)
         wm = cls.get_workspace_manager()
 
@@ -48,11 +54,24 @@ class TestOrchestrator:
         db.session.commit()
 
         # Submit to background task runner
-        task_runner.submit_task(run.id, cls._run_exploration_task, project_id=project.id)
+        task_runner.submit_task(
+            run.id,
+            cls._run_exploration_task,
+            project_id=project.id,
+            headless=headless,
+            slow_mo=slow_mo,
+        )
         return run
 
     @classmethod
-    def _run_exploration_task(cls, run_id: str, cancel_event, project_id: str):
+    def _run_exploration_task(
+        cls,
+        run_id: str,
+        cancel_event,
+        project_id: str,
+        headless: Optional[bool] = None,
+        slow_mo: Optional[int] = None,
+    ):
         wm = cls.get_workspace_manager()
         project = db.session.get(Project, project_id)
         run = db.session.get(TestRun, run_id)
@@ -77,6 +96,11 @@ class TestOrchestrator:
         agent = get_explorer_agent(agent_type)
         project_dir = wm.get_project_dir(project.id)
 
+        if headless is None:
+            headless = current_app.config.get("PLAYWRIGHT_HEADLESS", True)
+        if slow_mo is None:
+            slow_mo = current_app.config.get("PLAYWRIGHT_SLOW_MO", 500 if not headless else 0)
+
         config = ExplorerConfig(
             project_id=project.id,
             target_url=project.target_url,
@@ -86,6 +110,8 @@ class TestOrchestrator:
             workspace_dir=str(project_dir),
             run_id=run.id,
             prd_text=project.prd_text,
+            headless=headless,
+            slow_mo=slow_mo,
         )
 
         result = agent.explore(
@@ -362,7 +388,9 @@ class TestOrchestrator:
         scenario_id: Optional[str] = None,
         target_files: Optional[List[str]] = None,
         target_tests: Optional[List[str]] = None,
-        trigger_source: str = "manual"
+        trigger_source: str = "manual",
+        headless: Optional[bool] = None,
+        slow_mo: Optional[int] = None,
     ) -> TestRun:
         """
         Triggers execution of either all test specs in the repository (suite run),
@@ -393,6 +421,8 @@ class TestOrchestrator:
             scenario_id=scenario_id,
             target_files=target_files,
             target_tests=target_tests,
+            headless=headless,
+            slow_mo=slow_mo,
         )
         return run
 
@@ -406,6 +436,8 @@ class TestOrchestrator:
         scenario_id: Optional[str] = None,
         target_files: Optional[List[str]] = None,
         target_tests: Optional[List[str]] = None,
+        headless: Optional[bool] = None,
+        slow_mo: Optional[int] = None,
     ):
         from app.core.test_runner import TestRunner
 
@@ -436,11 +468,18 @@ class TestOrchestrator:
         log_callback("INFO", f"Initializing test execution run {run.id} for project '{project.name}'")
         project_dir = wm.get_project_dir(project.id)
 
+        if headless is None:
+            headless = current_app.config.get("PLAYWRIGHT_HEADLESS", True)
+        if slow_mo is None:
+            slow_mo = current_app.config.get("PLAYWRIGHT_SLOW_MO", 500 if not headless else 0)
+
         runner = TestRunner(
             workspace_dir=str(project_dir),
             project_id=project.id,
             run_id=run.id,
             target_url=project.target_url,
+            headless=headless,
+            slow_mo=slow_mo,
         )
 
         results = runner.execute(

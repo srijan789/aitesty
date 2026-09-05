@@ -23,6 +23,10 @@ class Config:
     EXPLORER_MODEL = os.environ.get("EXPLORER_MODEL", "openrouter/google-gemini-3.7-flash")
     GENERATOR_MODEL = os.environ.get("GENERATOR_MODEL", "openrouter/google-gemini-3.7-flash")
 
+    # Browser Execution Configuration
+    PLAYWRIGHT_HEADLESS = os.environ.get("PLAYWRIGHT_HEADLESS", "true").lower() == "true"
+    PLAYWRIGHT_SLOW_MO = int(os.environ.get("PLAYWRIGHT_SLOW_MO", "0"))
+
 from sqlalchemy.pool import StaticPool
 
 class TestingConfig(Config):

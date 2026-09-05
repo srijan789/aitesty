@@ -8,6 +8,7 @@ from app.extensions import db
 from app.models.project import Project
 from app.models.test_plan import TestPlan, TestCase
 from app.models.test_run import TestRun
+from app.core.task_runner import task_runner
 from config import TestingConfig
 
 @pytest.fixture
@@ -16,6 +17,8 @@ def app():
     with app.app_context():
         db.create_all()
         yield app
+        task_runner.wait_for_all_tasks(timeout=2.0)
+        db.session.remove()
         db.drop_all()
         if Path(app.config["WORKSPACES_ROOT"]).exists():
             shutil.rmtree(app.config["WORKSPACES_ROOT"], ignore_errors=True)
@@ -312,5 +315,44 @@ def test_bulk_delete_scenarios_and_files(client, app):
     assert data_exec["success"] is True
     assert data_exec["target_files"] == ["tests/test_a.spec.py", "tests/test_b.spec.py"]
     assert data_exec["target_tests"] == ["test_01_navigate", "test_02_interaction"]
+
+def test_headless_and_slow_mo_api_options(client, app):
+    # Create project
+    res = client.post(
+        "/projects",
+        data={
+            "name": "Headed Mode Project",
+            "target_url": "https://example.com",
+            "auth_type": "none",
+        },
+        follow_redirects=True,
+    )
+    assert res.status_code == 200
+
+    with app.app_context():
+        proj = Project.query.filter_by(name="Headed Mode Project").first()
+        proj_id = proj.id
+
+    # 1. Trigger exploration with headed=True (headless=False) and slow_mo=500
+    res_exp = client.post(
+        f"/api/projects/{proj_id}/explore",
+        json={"headless": False, "slow_mo": 500},
+    )
+    assert res_exp.status_code == 202
+    data_exp = res_exp.get_json()
+    assert data_exp["success"] is True
+    assert "run_id" in data_exp
+
+    # 2. Trigger test execution with headless=False and slow_mo=500
+    res_exec = client.post(
+        f"/api/projects/{proj_id}/execute-tests",
+        json={"headless": False, "slow_mo": 500},
+    )
+    assert res_exec.status_code == 202
+    data_exec = res_exec.get_json()
+    assert data_exec["success"] is True
+    assert "run_id" in data_exec
+
+    task_runner.wait_for_all_tasks(timeout=5.0)
 
 

@@ -16,7 +16,20 @@ def get_wm() -> WorkspaceManager:
 @api_bp.route("/projects/<project_id>/explore", methods=["POST"])
 def trigger_exploration(project_id):
     try:
-        run = TestOrchestrator.trigger_exploration(project_id, trigger_source="api")
+        data = request.get_json(silent=True) or {}
+        headless = data.get("headless")
+        if headless is None and "headless" in request.args:
+            headless = request.args.get("headless", "").lower() != "false"
+        slow_mo = data.get("slow_mo")
+        if slow_mo is None and "slow_mo" in request.args:
+            slow_mo = request.args.get("slow_mo", type=int)
+
+        run = TestOrchestrator.trigger_exploration(
+            project_id,
+            trigger_source="api",
+            headless=headless,
+            slow_mo=slow_mo,
+        )
         return jsonify({
             "success": True,
             "run_id": run.id,
@@ -53,6 +66,13 @@ def trigger_test_execution(project_id):
         scenario_id = data.get("scenario_id")
         target_files = data.get("target_files")
         target_tests = data.get("target_tests") or data.get("test_names")
+        headless = data.get("headless")
+        if headless is None and "headless" in request.args:
+            headless = request.args.get("headless", "").lower() != "false"
+        slow_mo = data.get("slow_mo")
+        if slow_mo is None and "slow_mo" in request.args:
+            slow_mo = request.args.get("slow_mo", type=int)
+
         run = TestOrchestrator.trigger_test_execution(
             project_id=project_id,
             target_file=target_file,
@@ -60,6 +80,8 @@ def trigger_test_execution(project_id):
             target_files=target_files,
             target_tests=target_tests,
             trigger_source="api",
+            headless=headless,
+            slow_mo=slow_mo,
         )
         return jsonify({
             "success": True,

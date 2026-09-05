@@ -13,9 +13,10 @@ class PlaywrightController:
     semantic DOM extractor, and screenshot manager.
     """
 
-    def __init__(self, headless: bool = True, timeout_ms: int = 15000):
+    def __init__(self, headless: bool = True, timeout_ms: int = 15000, slow_mo: int = 0):
         self.headless = headless
         self.timeout_ms = timeout_ms
+        self.slow_mo = slow_mo
         self.playwright: Optional[Playwright] = None
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
@@ -30,6 +31,7 @@ class PlaywrightController:
         self.playwright = sync_playwright().start()
         self.browser = self.playwright.chromium.launch(
             headless=self.headless,
+            slow_mo=self.slow_mo,
             args=["--disable-dev-shm-usage", "--no-sandbox"],
         )
         self.context = self.browser.new_context(
