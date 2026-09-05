@@ -1,0 +1,15 @@
+{
+  "id": "43423a4d-6faa-4d24-b395-0b3cfad399ee",
+  "name": "final aivar demo",
+  "description": "",
+  "target_url": "https://d2928k9vety1kj.cloudfront.net/sso/login",
+  "auth_type": "basic",
+  "credentials": {
+    "username": "user-3-Team10@velogent.com",
+    "password": "F@@OLwY16C"
+  },
+  "scope_instructions": "",
+  "prd_text": "",
+  "created_at": "2026-09-05T14:16:35.021677",
+  "updated_at": "2026-09-05T14:16:35.024382"
+}

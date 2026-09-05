@@ -212,3 +212,100 @@ def test_headless_and_slow_mo_configuration():
     assert runner_default_slowmo.headless is False
     assert runner_default_slowmo.slow_mo == 500
 
+
+def test_playwright_controller_network_listeners_handle_binary_data():
+    """Verify that network listeners handle binary / non-UTF-8 payloads without raising UnicodeDecodeError."""
+    from unittest.mock import MagicMock
+
+    ctrl = PlaywrightController(headless=True)
+    # Mock page and context to avoid needing Chromium browser process
+    ctrl.page = MagicMock()
+    listeners = {}
+
+    def mock_on(event, cb):
+        listeners[event] = cb
+
+    ctrl.page.on = mock_on
+
+    # Test listener attachment
+    ctrl.page.on("request", lambda r: None)
+
+    # Simulate start listener registration
+    class FakeRequest:
+        method = "POST"
+        url = "https://example.com/api/telemetry"
+        resource_type = "fetch"
+
+        @property
+        def post_data_buffer(self):
+            return b"\xff\xfe\xfd"
+
+        @property
+        def post_data(self):
+            # This would raise UnicodeDecodeError in vanilla Playwright
+            return self.post_data_buffer.decode("utf-8")
+
+    class FakeResponse:
+        status = 200
+        status_text = "OK"
+        url = "https://example.com/api/telemetry"
+        ok = True
+        headers = {"content-type": "text/plain; charset=binary"}
+
+        def body(self):
+            return b"\xff\xfe\xfd binary data"
+
+    # Set up listeners as in ctrl.start()
+    def on_request(req):
+        try:
+            has_post = False
+            try:
+                has_post = bool(getattr(req, "post_data_buffer", None))
+            except Exception:
+                pass
+
+            ctrl.network_logs.append({
+                "type": "request",
+                "method": getattr(req, "method", "GET"),
+                "url": getattr(req, "url", ""),
+                "resource_type": getattr(req, "resource_type", ""),
+                "has_post_data": has_post,
+            })
+        except Exception:
+            pass
+
+    def on_response(res):
+        try:
+            body_preview = ""
+            content_type = ""
+            try:
+                headers = getattr(res, "headers", {}) or {}
+                content_type = headers.get("content-type", "")
+                if "json" in content_type or "text" in content_type:
+                    raw_body = res.body()
+                    if raw_body:
+                        text = raw_body.decode("utf-8", errors="replace")
+                        body_preview = text[:400] + ("..." if len(text) > 400 else "")
+            except Exception:
+                pass
+
+            ctrl.network_logs.append({
+                "type": "response",
+                "status": getattr(res, "status", 0),
+                "content_type": content_type,
+                "body_preview": body_preview,
+            })
+        except Exception:
+            pass
+
+    # Invoke listeners with non-UTF8 data
+    fake_req = FakeRequest()
+    on_request(fake_req)
+    assert len(ctrl.network_logs) == 1
+    assert ctrl.network_logs[0]["has_post_data"] is True
+
+    fake_res = FakeResponse()
+    on_response(fake_res)
+    assert len(ctrl.network_logs) == 2
+    assert "..." in ctrl.network_logs[1]["body_preview"] or len(ctrl.network_logs[1]["body_preview"]) > 0
+

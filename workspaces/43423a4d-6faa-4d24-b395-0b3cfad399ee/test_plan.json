@@ -1,0 +1,326 @@
+{
+  "id": "fba05731-6f14-4fe0-bcef-694562701116",
+  "project_id": "43423a4d-6faa-4d24-b395-0b3cfad399ee",
+  "version": 1,
+  "status": "active",
+  "summary": "E2E Automated Test Plan for final aivar demo (v1)",
+  "raw_markdown": null,
+  "created_at": "2026-09-05T14:18:27.936739",
+  "updated_at": "2026-09-05T14:18:27.936740",
+  "scenarios": [
+    {
+      "id": "ee397770-e8e9-4f41-b441-1eed8705701f",
+      "test_plan_id": "fba05731-6f14-4fe0-bcef-694562701116",
+      "title": "User Authentication via SSO Login Flow",
+      "category": "happy_path",
+      "priority": "P0",
+      "preconditions": "User is on the SSO login page (/sso/login) and not authenticated.",
+      "description": "Verify that a user with valid credentials can successfully authenticate and is redirected to the Agentflows dashboard.",
+      "steps": [
+        {
+          "step_number": 1,
+          "action": "Navigate",
+          "expected_outcome": "Login form rendered with username and password inputs.",
+          "target_element": "https://d2928k9vety1kj.cloudfront.net/sso/login"
+        },
+        {
+          "action": "Fill",
+          "target_element": "#login-username",
+          "expected_outcome": "Username input contains valid email.",
+          "step_number": 2
+        },
+        {
+          "action": "Fill",
+          "step_number": 3,
+          "target_element": "#login-password",
+          "expected_outcome": "Password input contains valid password."
+        },
+        {
+          "step_number": 4,
+          "target_element": "button:has-text(\"Sign in\")",
+          "action": "Click",
+          "expected_outcome": "Auth request sent and user redirected to /agentflows."
+        }
+      ],
+      "expected_result": "User is authenticated and redirected to /agentflows with workspace and navigation elements loaded.",
+      "pass_fail_criteria": "PASS: HTTP POST to /api/v1/auth/login returns 200 OK and browser redirects to /agentflows. FAIL: Authentication fails or user remains stuck on /sso/login.",
+      "script_path": "tests/test_01_happy_path_user_authentication_via_sso_lo.spec.py",
+      "status": "marked_for_automation",
+      "healing_notes": "[AUTOMATION_FAILURE] [NEEDS_FIX]: Automation script passed a non-string or None value to a Playwright method/assertion requiring a string or regex.\n\nRoot Cause: Playwright raised 'Error: value must be a string or regular expression', which occurs when an assertion or locator method (such as expect(page).to_have_url, to_have_text, or locator.fill) receives a NoneType, integer, or invalid object instead of an expected string or compiled regex pattern.\n\nNotes for Planner: Scenario remains valid. The script failed due to passing an invalid data type (e.g., None or non-string/regex object) to a Playwright assertion or action. No product defect identified.\n\nNotes for Generator: Ensure all Playwright methods and assertions (such as expect(page).to_have_url(...), expect(locator).to_have_text(...), locator.fill(...)) are passed valid string or regex values instead of None, booleans, or uncast non-string variables. Check environment variable lookups or helper return values to ensure they return valid strings.\n\nSuggested Fix: Verify that all values passed to Playwright assertions and input methods are non-None string literals or regex patterns.\n\nAlternative Selectors: input[name=\"username\"], input[name=\"email\"], input[type=\"text\"], input[name=\"password\"], input[type=\"password\"], button[type=\"submit\"]",
+      "healing_status": "needs_script_fix",
+      "execution_order": 0,
+      "created_at": "2026-09-05T14:18:27.937995"
+    },
+    {
+      "id": "3d2a7fc8-8776-4d22-95d4-5965cebf8107",
+      "test_plan_id": "fba05731-6f14-4fe0-bcef-694562701116",
+      "title": "Authentication Failure with Invalid Credentials",
+      "category": "error_flow",
+      "priority": "P0",
+      "preconditions": "User is on /sso/login.",
+      "description": "Verify that submitting invalid credentials displays an error message and prevents unauthorized access.",
+      "steps": [
+        {
+          "action": "Navigate",
+          "expected_outcome": "Login page displays.",
+          "target_element": "/sso/login",
+          "step_number": 1
+        },
+        {
+          "action": "Fill",
+          "expected_outcome": "Field filled with non-existent user.",
+          "step_number": 2,
+          "target_element": "#login-username"
+        },
+        {
+          "expected_outcome": "Field filled with invalid password.",
+          "step_number": 3,
+          "target_element": "#login-password",
+          "action": "Fill"
+        },
+        {
+          "expected_outcome": "Error banner/alert is displayed indicating invalid credentials.",
+          "action": "Click",
+          "step_number": 4,
+          "target_element": "button:has-text(\"Sign in\")"
+        }
+      ],
+      "expected_result": "Login request fails with 401 Unauthorized or error toast/alert, retaining user on login screen.",
+      "pass_fail_criteria": "PASS: Error message/feedback is presented, no session is established, URL remains /sso/login. FAIL: System allows access or throws an unhandled exception crash.",
+      "script_path": "tests/test_02_error_flow_authentication_failure_with_in.spec.py",
+      "status": "marked_for_automation",
+      "healing_notes": "[AUTOMATION_FAILURE] [NEEDS_FIX]: Test failed due to an invalid selector string combining CSS and Playwright text regex selectors improperly.\n\nRoot Cause: The test script combined CSS selectors and a Playwright text regex selector (`text=/.../`) in a single comma-separated string `[role=\"alert\"], ..., text=/invalid.../i`, which failed the CSS parser with 'Unexpected token \"=\" while parsing css selector'.\n\nNotes for Planner: The scenario is valid (verifying authentication failure feedback upon invalid credentials). The test script failed due to an invalid combined selector string syntax. Keep scenario in the test plan and heal the selector.\n\nNotes for Generator: Fix the malformed selector in Step 4. Playwright's locator parsing fails when mixing CSS selector comma-separated lists with 'text=/.../' pseudo-selectors. Instead, use Playwright locator union / .or_() or valid Playwright selector syntax, such as:\n`page.locator('[role=\"alert\"], .error, .error-message, .alert, .ant-alert, [data-testid=\"error-message\"]').or(page.get_by_text(re.compile(r\"invalid|incorrect|unauthorized|failed|error|not found|wrong\", re.I)))` or standard alert locator `page.get_by_role(\"alert\")`.\n\nSuggested Fix: Replace the comma-separated CSS/text string with page.locator().or(page.get_by_text(...)) or a valid Playwright selector chain.\n\nAlternative Selectors: [role=\"alert\"], .ant-alert, .error-message, div:has-text(\"Invalid\")",
+      "healing_status": "needs_script_fix",
+      "execution_order": 1,
+      "created_at": "2026-09-05T14:18:27.937999"
+    },
+    {
+      "id": "b4cc172f-fd1b-4ee4-a22f-20055e395f30",
+      "test_plan_id": "fba05731-6f14-4fe0-bcef-694562701116",
+      "title": "Primary Sidebar Navigation Route Transitions",
+      "category": "happy_path",
+      "priority": "P1",
+      "preconditions": "User is logged in and on /agentflows.",
+      "description": "Verify that authenticated users can switch between primary sections using the main sidebar navigation.",
+      "steps": [
+        {
+          "action": "Click",
+          "target_element": "a[href=\"/dashboard/overview\"]",
+          "step_number": 1,
+          "expected_outcome": "Navigates to /dashboard/overview with Overview and Cost metrics."
+        },
+        {
+          "action": "Click",
+          "expected_outcome": "Navigates to /executions with execution history table.",
+          "target_element": "a[href=\"/executions\"]",
+          "step_number": 2
+        },
+        {
+          "action": "Click",
+          "expected_outcome": "Navigates to /tools with tool list and search options.",
+          "target_element": "a[href=\"/tools\"]",
+          "step_number": 3
+        },
+        {
+          "step_number": 4,
+          "target_element": "a[href=\"/marketplaces\"]",
+          "expected_outcome": "Navigates to /marketplaces with AgentHub catalog.",
+          "action": "Click"
+        }
+      ],
+      "expected_result": "Navigation seamlessly loads selected routes (Dashboard, Agentflows, Executions, Tools, AgentHub, Knowledge Base) without errors.",
+      "pass_fail_criteria": "PASS: Clicking sidebar links updates the URL and renders corresponding header and page components. FAIL: White screen, 404/500 errors, or failed transitions.",
+      "script_path": "tests/test_03_happy_path_primary_sidebar_navigation_rou.spec.py",
+      "status": "marked_for_automation",
+      "healing_notes": "[AUTOMATION_FAILURE] [NEEDS_FIX]: Test script passed an invalid non-string/non-regex argument to a Playwright matcher or assertion function.\n\nRoot Cause: Playwright raised 'value must be a string or regular expression' because a string/regex parameter expected by an assertion (such as expect(page).to_have_url() or expect(locator).to_have_text()) received an invalid type (such as None, boolean, or a non-string object).\n\nNotes for Planner: The scenario is valid (testing primary sidebar navigation to /tools). The test script has a Playwright parameter type error (passing a non-string/non-regex value to an assertion or locator). Keep scenario active and update test script.\n\nNotes for Generator: Review the URL assertion or locator matchers in test_03_happy_path_primary_sidebar_navigation_rou.spec.py. Ensure arguments passed to `expect(page).to_have_url()`, `page.wait_for_url()`, `expect(locator).to_have_text()`, or `get_by_*` methods are valid strings or compiled regular expressions (`re.compile(...)`) instead of None, booleans, or unquoted variables.\n\nSuggested Fix: Pass a valid string URL or regex pattern (e.g., expect(page).to_have_url(re.compile(r'/tools'))) in step 3 verification.\n\nAlternative Selectors: a[href*=\"/tools\"], nav a:has-text(\"Tools\"), button:has-text(\"Tools\")",
+      "healing_status": "needs_script_fix",
+      "execution_order": 2,
+      "created_at": "2026-09-05T14:18:27.938003"
+    },
+    {
+      "id": "68771480-be35-44da-92ea-327e0eeb20c6",
+      "test_plan_id": "fba05731-6f14-4fe0-bcef-694562701116",
+      "title": "Search Field Query and Special Characters Handling",
+      "category": "edge_case",
+      "priority": "P2",
+      "preconditions": "User is authenticated on /tools.",
+      "description": "Verify search input filtering behavior across views (Agentflows, Tools, AgentHub) with special characters and empty values.",
+      "steps": [
+        {
+          "action": "Navigate",
+          "expected_outcome": "Tools page loaded.",
+          "target_element": "/tools",
+          "step_number": 1
+        },
+        {
+          "target_element": "input[type=\"search\"]",
+          "action": "Fill",
+          "expected_outcome": "Search query populated.",
+          "step_number": 2
+        },
+        {
+          "target_element": "input[type=\"search\"]",
+          "expected_outcome": "Search safely evaluated without syntax errors or unhandled exceptions.",
+          "step_number": 3,
+          "action": "Fill"
+        }
+      ],
+      "expected_result": "Search query handles special characters safely without application crashes or XSS, displaying appropriate matches or empty state.",
+      "pass_fail_criteria": "PASS: Input accepts text, triggers search filtering, handles special chars ('<script>', '`', '%'), and shows zero/relevant results. FAIL: Uncaught JS error or application freeze.",
+      "script_path": "tests/test_04_edge_case_search_field_query_and_special.spec.py",
+      "status": "marked_for_automation",
+      "healing_notes": "[AUTOMATION_FAILURE] [NEEDS_FIX]: Test failed during the authentication prerequisite due to a 30s timeout waiting for the email/username input selector.\n\nRoot Cause: The test script failed during the authentication setup phase. It timed out after 30 seconds waiting for `locator(\"input[name='email'], input[type='email'], input[name='username']\").first` on the SSO login page, indicating either selector mismatch or slow/dynamic rendering of the login form elements.\n\nNotes for Planner: Scenario 'Search Field Query and Special Characters Handling' is valid. The failure occurred during the authentication / login prerequisite step because the email input field selector timed out. Keep the test case in scope and update auth fixture/helpers.\n\nNotes for Generator: Update authentication helper in the test script to verify page load state before attempting login. Ensure resilient locator strategies for login input fields (e.g. `input[type='text']`, `input[placeholder*='email' i]`, `input[placeholder*='username' i]`, `role=textbox`), or verify if SSO redirection requires an explicit wait/button click before the email input is rendered.\n\nSuggested Fix: Update login helper locators to include generic textboxes, placeholder-based matching, and explicit wait for login container visibility.\n\nAlternative Selectors: input[placeholder*='email' i], input[placeholder*='username' i], input[type='text'], input#email, input#username",
+      "healing_status": "needs_script_fix",
+      "execution_order": 3,
+      "created_at": "2026-09-05T14:18:27.938007"
+    },
+    {
+      "id": "15195c57-9d52-4078-b16c-37ed8d4bb781",
+      "test_plan_id": "fba05731-6f14-4fe0-bcef-694562701116",
+      "title": "View Layout Switching (Card vs List View)",
+      "category": "happy_path",
+      "priority": "P2",
+      "preconditions": "User is on /agentflows or /tools view.",
+      "description": "Verify toggling view layouts between Card and List presentation modes in Agentflows and Tools views.",
+      "steps": [
+        {
+          "action": "Navigate",
+          "target_element": "/agentflows",
+          "step_number": 1,
+          "expected_outcome": "Agentflows view loaded."
+        },
+        {
+          "action": "Click",
+          "expected_outcome": "Layout renders items in list table format.",
+          "target_element": "button:has-text(\"list\")",
+          "step_number": 2
+        },
+        {
+          "target_element": "button:has-text(\"card\")",
+          "step_number": 3,
+          "expected_outcome": "Layout renders items in card grid format.",
+          "action": "Click"
+        }
+      ],
+      "expected_result": "Content display switches between grid cards and list rows smoothly.",
+      "pass_fail_criteria": "PASS: Active view state toggles between card and list layout without data loss. FAIL: UI does not react or layout is broken.",
+      "script_path": "tests/test_05_happy_path_view_layout_switching_card_vs_.spec.py",
+      "status": "marked_for_automation",
+      "healing_notes": "[AUTOMATION_FAILURE] [NEEDS_FIX]: Test failed looking for view layout toggle buttons while still on the SSO login page due to uncompleted authentication.\n\nRoot Cause: The test script attempted to find layout view toggles (card/grid buttons) while the browser was still on the unauthenticated SSO login screen ('Welcome back', 'Sign in to your Velogent workspace'). Login was either skipped or not completed prior to assertions.\n\nNotes for Planner: Scenario is valid. Script failed because it did not authenticate or wait for authentication completion before attempting to assert view layout buttons on the protected `/agentflows` page.\n\nNotes for Generator: Ensure the test completes authentication via the SSO login form (fill username, password, click 'Sign in', and wait for navigation away from /sso/login or wait for the dashboard/agentflows navigation) before attempting to interact with the view layout toggles on `/agentflows`.\n\nSuggested Fix: Complete login authentication and wait for redirect/navigation to /agentflows before asserting view toggle buttons.\n\nAlternative Selectors: input[placeholder*=\"username\" i], [name=\"username\"], input[type=\"password\"], button:has-text(\"Sign in\")",
+      "healing_status": "needs_script_fix",
+      "execution_order": 4,
+      "created_at": "2026-09-05T14:18:27.938010"
+    },
+    {
+      "id": "e385b6b7-f1da-4a05-a6f6-57c1a52ce76e",
+      "test_plan_id": "fba05731-6f14-4fe0-bcef-694562701116",
+      "title": "Permission State and Action Button Disabled State Verification",
+      "category": "edge_case",
+      "priority": "P1",
+      "preconditions": "User is authenticated with default workspace permissions on /agentflows.",
+      "description": "Verify RBAC/Permission state enforcement on action buttons (e.g., disabled 'Add New' or 'Create' buttons when permissions/limits apply).",
+      "steps": [
+        {
+          "action": "Navigate",
+          "step_number": 1,
+          "target_element": "/agentflows",
+          "expected_outcome": "Agentflows page rendered."
+        },
+        {
+          "step_number": 2,
+          "expected_outcome": "Button has disabled attribute / Mui-disabled class.",
+          "action": "Assert",
+          "target_element": "button:has-text(\"Add New\")"
+        },
+        {
+          "step_number": 3,
+          "action": "Navigate",
+          "expected_outcome": "Tools page rendered.",
+          "target_element": "/tools"
+        },
+        {
+          "target_element": "button:has-text(\"Create\")",
+          "action": "Assert",
+          "expected_outcome": "Create button has disabled attribute when unauthorized.",
+          "step_number": 4
+        }
+      ],
+      "expected_result": "Buttons properly reflect authorization state with disabled attributes and clear tooltip/indication when user lacks creation permissions.",
+      "pass_fail_criteria": "PASS: Disabled buttons cannot be triggered to perform invalid API mutations and have proper ARIA disabled states. FAIL: Clicking disabled button causes unhandled client or server exceptions.",
+      "script_path": "tests/test_06_edge_case_permission_state_and_action_bu.spec.py",
+      "status": "marked_for_automation",
+      "healing_notes": "[AUTOMATION_FAILURE] [NEEDS_FIX]: Locator.is_disabled timed out waiting for 'Add New'/'Create' button to appear in the DOM, caused by checking disabled state on an unrendered or absent RBAC element.\n\nRoot Cause: Playwright's `locator.is_disabled()` timed out after 30000ms waiting for `button:has-text('Add New'), button:has-text('Create')` to attach to the DOM. The element was not present on the page (either because RBAC removes the element entirely from the DOM or the locator text does not match the actual UI button).\n\nNotes for Planner: Review the RBAC requirement for this view: verify whether unauthorized users should see disabled action buttons ('Add New' / 'Create') or if the UI completely hides action controls for restricted roles. Update the test expectations accordingly.\n\nNotes for Generator: 1. When testing disabled/RBAC states, do not directly call `locator.is_disabled()` on locators that might not exist in the DOM, as Playwright will wait 30s for the element to attach.\n2. Instead, check `count()` or `is_visible(timeout=3000)` first, or verify if the button exists before asserting `is_disabled()`.\n3. If RBAC enforces permission by removing/hiding the button rather than disabling it, assert `expect(locator).to_be_hidden()` or `expect(locator).to_have_count(0)`.\n4. Check whether the button text is actually 'Add', 'New', 'Create', '+', or role='button' with an accessible name.\n\nSuggested Fix: Check if the button is present in the DOM before asserting `is_disabled()`, or assert that the action button is hidden/unrendered if RBAC hides controls.\n\nAlternative Selectors: button:has-text('Add'), button:has-text('Create'), [data-testid*=\"create\"], [data-testid*=\"add\"], button[aria-label*=\"Add\"]",
+      "healing_status": "needs_script_fix",
+      "execution_order": 5,
+      "created_at": "2026-09-05T14:18:27.938013"
+    },
+    {
+      "id": "e429ec37-e573-412a-8533-00c45bd30c0a",
+      "test_plan_id": "fba05731-6f14-4fe0-bcef-694562701116",
+      "title": "Handling of Invalid Routes and 404 States",
+      "category": "error_flow",
+      "priority": "P2",
+      "preconditions": "User is authenticated in the application.",
+      "description": "Verify application behavior when navigating to non-existent route or invalid URL path.",
+      "steps": [
+        {
+          "target_element": "/non-existent-route-qa-test",
+          "expected_outcome": "404 Not Found view or graceful fallback route rendered.",
+          "step_number": 1,
+          "action": "Navigate"
+        },
+        {
+          "target_element": "a[href=\"/dashboard/overview\"]",
+          "step_number": 2,
+          "action": "Assert",
+          "expected_outcome": "Sidebar and header navigation remain operational."
+        }
+      ],
+      "expected_result": "Application presents a graceful 404 Not Found page or redirects to dashboard without crashing.",
+      "pass_fail_criteria": "PASS: Clean 404 page or fallback redirect with navigation options intact. FAIL: Uncaught JavaScript error, blank white page, or broken layout.",
+      "script_path": "tests/test_07_error_flow_handling_of_invalid_routes_and.spec.py",
+      "status": "marked_for_automation",
+      "healing_notes": "[AUTOMATION_FAILURE] [NEEDS_FIX]: Test failed asserting authenticated dashboard navigation links because the browser remained on the login page.\n\nRoot Cause: The test failed because it attempted to assert authenticated sidebar/navigation links (`a[href*=\"/dashboard/overview\"]`, `nav a`, `aside a`), but the browser was still on the `/sso/login` page where only login form elements ('Sign in', 'Username', 'Password', 'Back to home') are present.\n\nNotes for Planner: Review scenario preconditions for invalid route handling: verify whether invalid route access is tested in an authenticated or unauthenticated state. If authenticated, fix the auth setup helper to ensure session is established before navigating to the invalid route.\n\nNotes for Generator: Ensure the authentication flow properly submits credentials and waits for navigation away from the login page (e.g., waiting for URL or dashboard element) before navigating to the invalid route. If unauthenticated navigation to invalid routes redirects to `/sso/login`, adjust assertions to verify login page elements (such as 'Back to home' or 'Sign in') rather than authenticated dashboard navigation links (`nav a`, `aside a`).\n\nSuggested Fix: Fix authentication wait and verify session state or assert visible login/home controls ('Back to home', 'Sign in') when redirected.\n\nAlternative Selectors: button:has-text(\"Back to home\"), button:has-text(\"Sign in\"), input[placeholder*=\"username\" i]",
+      "healing_status": "needs_script_fix",
+      "execution_order": 6,
+      "created_at": "2026-09-05T14:18:27.938016"
+    },
+    {
+      "id": "c9f61ee8-417e-4cdd-82b3-c1ef05b3a090",
+      "test_plan_id": "fba05731-6f14-4fe0-bcef-694562701116",
+      "title": "Dashboard Tab Switching (Overview vs Cost)",
+      "category": "happy_path",
+      "priority": "P1",
+      "preconditions": "User is authenticated and on /dashboard/overview.",
+      "description": "Verify Dashboard metrics tab switching between Overview and Cost views.",
+      "steps": [
+        {
+          "action": "Navigate",
+          "target_element": "/dashboard/overview",
+          "step_number": 1,
+          "expected_outcome": "Dashboard loaded with Overview tab active."
+        },
+        {
+          "action": "Click",
+          "step_number": 2,
+          "target_element": "button:has-text(\"Cost\")",
+          "expected_outcome": "Cost tab is selected and Cost metrics/breakdown panel is displayed."
+        },
+        {
+          "step_number": 3,
+          "target_element": "button:has-text(\"Overview\")",
+          "expected_outcome": "Overview tab is selected and Overview metrics are displayed.",
+          "action": "Click"
+        }
+      ],
+      "expected_result": "Dashboard tabs switch properly, updating charts and metric panels for the selected tab.",
+      "pass_fail_criteria": "PASS: Switching tabs loads corresponding metrics without console errors. FAIL: Charts fail to render or tabs remain inactive.",
+      "script_path": "tests/test_08_happy_path_dashboard_tab_switching_overvi.spec.py",
+      "status": "marked_for_automation",
+      "healing_notes": "[AUTOMATION_FAILURE] [NEEDS_FIX]: Authentication failed to navigate away from the login page, causing dashboard tab locator timeout.\n\nRoot Cause: The test failed because the authentication step did not successfully transition to the dashboard, leaving the page on the SSO login form where the 'Cost' tab locator timed out.\n\nNotes for Planner: Test failed at authentication/login precondition step; dashboard tabs ('Cost'/'Overview') were unreachable because the browser remained on /sso/login. Verify authentication fixture and credentials.\n\nNotes for Generator: Ensure login authentication succeeds before attempting to locate dashboard elements. Verify valid credentials are used or that post-login navigation to the dashboard URL is awaited. If auth is mocked or requires specific storage_state, provide valid session state or correct credentials and wait for url to transition away from /sso/login.\n\nSuggested Fix: Fix login flow / authentication helper to verify successful login redirect to the dashboard before querying dashboard tab selectors.\n\nAlternative Selectors: button:has-text(\"Cost\"), [role=\"tab\"]:has-text(\"Cost\"), button:has-text(\"Sign in\")",
+      "healing_status": "needs_script_fix",
+      "execution_order": 7,
+      "created_at": "2026-09-05T14:18:27.938020"
+    }
+  ]
+}

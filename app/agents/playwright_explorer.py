@@ -710,6 +710,7 @@ When you have thoroughly explored the routes and prepared at least {target_test_
                 return {"error": f"Unknown tool {fn_name}"}
 
         except Exception as tool_err:
+            logger.warning(f"Tool {fn_name} execution error: {tool_err}", exc_info=True)
             log_callback("WARN", f"Tool {fn_name} error: {tool_err}")
             return {"error": str(tool_err)}
 

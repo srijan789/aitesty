@@ -44,52 +44,77 @@ class PlaywrightController:
 
         # Hook network request listener
         def on_request(req):
-            self.network_logs.append({
-                "type": "request",
-                "timestamp": datetime.utcnow().isoformat(),
-                "method": req.method,
-                "url": req.url,
-                "resource_type": req.resource_type,
-                "has_post_data": bool(req.post_data),
-            })
+            try:
+                has_post = False
+                try:
+                    # Use post_data_buffer to safely check for payload presence
+                    # without triggering a UnicodeDecodeError on binary/non-UTF8 payloads
+                    has_post = bool(getattr(req, "post_data_buffer", None))
+                except Exception:
+                    pass
+
+                self.network_logs.append({
+                    "type": "request",
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "method": getattr(req, "method", "GET"),
+                    "url": getattr(req, "url", ""),
+                    "resource_type": getattr(req, "resource_type", ""),
+                    "has_post_data": has_post,
+                })
+            except Exception as e:
+                logger.debug(f"Error in on_request listener: {e}")
 
         # Hook network response listener
         def on_response(res):
-            body_preview = ""
             try:
-                # Capture preview for text/json responses
-                content_type = res.headers.get("content-type", "")
-                if "json" in content_type or "text" in content_type:
-                    text = res.text()
-                    body_preview = text[:400] + ("..." if len(text) > 400 else "")
-            except Exception:
-                pass
+                body_preview = ""
+                content_type = ""
+                try:
+                    headers = getattr(res, "headers", {}) or {}
+                    content_type = headers.get("content-type", "")
+                    if "json" in content_type or "text" in content_type:
+                        # Use body() with errors="replace" instead of text()
+                        # to guarantee no UnicodeDecodeError is raised for non-UTF8 text/compressed bodies
+                        raw_body = res.body()
+                        if raw_body:
+                            text = raw_body.decode("utf-8", errors="replace")
+                            body_preview = text[:400] + ("..." if len(text) > 400 else "")
+                except Exception:
+                    pass
 
-            self.network_logs.append({
-                "type": "response",
-                "timestamp": datetime.utcnow().isoformat(),
-                "status": res.status,
-                "status_text": res.status_text,
-                "url": res.url,
-                "ok": res.ok,
-                "content_type": res.headers.get("content-type", ""),
-                "body_preview": body_preview,
-            })
+                self.network_logs.append({
+                    "type": "response",
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "status": getattr(res, "status", 0),
+                    "status_text": getattr(res, "status_text", ""),
+                    "url": getattr(res, "url", ""),
+                    "ok": getattr(res, "ok", False),
+                    "content_type": content_type,
+                    "body_preview": body_preview,
+                })
+            except Exception as e:
+                logger.debug(f"Error in on_response listener: {e}")
 
         # Hook console listener
         def on_console(msg):
-            self.console_logs.append({
-                "timestamp": datetime.utcnow().isoformat(),
-                "type": msg.type,
-                "text": msg.text,
-            })
+            try:
+                self.console_logs.append({
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "type": getattr(msg, "type", "log"),
+                    "text": str(getattr(msg, "text", "")),
+                })
+            except Exception as e:
+                logger.debug(f"Error in on_console listener: {e}")
 
         # Hook page error listener
         def on_page_error(err):
-            self.page_errors.append({
-                "timestamp": datetime.utcnow().isoformat(),
-                "message": str(err),
-            })
+            try:
+                self.page_errors.append({
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "message": str(err),
+                })
+            except Exception as e:
+                logger.debug(f"Error in on_page_error listener: {e}")
 
         self.page.on("request", on_request)
         self.page.on("response", on_response)
