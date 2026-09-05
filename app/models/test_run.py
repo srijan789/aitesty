@@ -63,6 +63,8 @@ class RunLog(db.Model):
     level = db.Column(db.String(20), default="INFO")  # DEBUG, INFO, WARN, ERROR
     message = db.Column(db.Text, nullable=False)
     metadata_json = db.Column(db.Text, nullable=True)
+    test_name = db.Column(db.String(150), nullable=True, index=True)
+    scenario_id = db.Column(db.String(50), nullable=True, index=True)
 
     def to_dict(self) -> dict:
         metadata = None
@@ -74,6 +76,8 @@ class RunLog(db.Model):
         return {
             "id": self.id,
             "run_id": self.run_id,
+            "test_name": self.test_name,
+            "scenario_id": self.scenario_id,
             "timestamp": self.timestamp.isoformat() if self.timestamp else None,
             "level": self.level,
             "message": self.message,

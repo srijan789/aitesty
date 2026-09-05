@@ -229,6 +229,7 @@ REQUIREMENTS FOR GENERATED TESTS:
    - Never write empty or tautological tests.
 6. All code must be syntactically valid Python 3, self-contained, and ready to execute.
 7. Call `save_test_spec_file` to output the complete file.
+8. HEALING & RECOVERY: If a scenario includes 'Healing & Diagnostic Guidance', strictly prioritize the suggested selectors, wait strategies, and locator fixes provided by the Results Analysis & Healer Agent.
 """
 
     def _build_generation_prompt(self, config: GeneratorConfig, category: str, scenarios: List[Dict[str, Any]]) -> str:
@@ -239,6 +240,7 @@ REQUIREMENTS FOR GENERATED TESTS:
                 if isinstance(st, dict) else f"    Step {i+1}: {st}"
                 for i, st in enumerate(s.get("steps", []))
             ])
+            healing_info = f"\nHealing & Diagnostic Guidance (Prior Failures / Healer Notes):\n{s['healing_notes']}\n" if s.get("healing_notes") else ""
             scenarios_desc.append(f"""
 Scenario ID: {s.get('id', 'N/A')}
 Title: {s.get('title')}
@@ -249,7 +251,7 @@ Description: {s.get('description', '')}
 Steps:
 {steps_text}
 Expected Result: {s.get('expected_result', '')}
-Pass/Fail Criteria: {s.get('pass_fail_criteria', '')}
+Pass/Fail Criteria: {s.get('pass_fail_criteria', '')}{healing_info}
 ---""")
 
         return f"""Please generate the Python Playwright test specification file `test_{category}.spec.py` for the following {len(scenarios)} scenarios:

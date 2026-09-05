@@ -164,6 +164,7 @@ class WorkspaceManager:
         run_dir.mkdir(parents=True, exist_ok=True)
         (run_dir / "screenshots").mkdir(parents=True, exist_ok=True)
         (run_dir / "traces").mkdir(parents=True, exist_ok=True)
+        (run_dir / "test_logs").mkdir(parents=True, exist_ok=True)
         
         # Touch initial execution.log
         log_file = run_dir / "execution.log"
@@ -189,6 +190,51 @@ class WorkspaceManager:
             return ""
         with open(log_file, "r", encoding="utf-8") as f:
             return f.read()
+
+    def append_test_log_file(self, project_id: str, run_id: str, test_name: str, level: str, message: str):
+        """Appends a log line to an isolated per-testcase log file."""
+        run_dir = self.get_run_dir(project_id, run_id)
+        test_logs_dir = run_dir / "test_logs"
+        test_logs_dir.mkdir(parents=True, exist_ok=True)
+        clean_name = "".join(c for c in test_name if c.isalnum() or c in ("-", "_")).strip() or "test"
+        log_file = test_logs_dir / f"{clean_name}.log"
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.utcnow().strftime('%H:%M:%S.%f')[:-3]}] [{level.upper()}] {message}\n")
+
+    def read_test_log_file(self, project_id: str, run_id: str, test_name: str) -> str:
+        """Reads isolated log lines for a specific testcase."""
+        run_dir = self.get_run_dir(project_id, run_id)
+        clean_name = "".join(c for c in test_name if c.isalnum() or c in ("-", "_")).strip() or "test"
+        log_file = run_dir / "test_logs" / f"{clean_name}.log"
+        if not log_file.exists():
+            return ""
+        with open(log_file, "r", encoding="utf-8") as f:
+            return f.read()
+
+    def list_test_log_files(self, project_id: str, run_id: str) -> List[str]:
+        """Lists test names that have isolated log files."""
+        run_dir = self.get_run_dir(project_id, run_id)
+        test_logs_dir = run_dir / "test_logs"
+        if not test_logs_dir.exists():
+            return []
+        return sorted([p.stem for p in test_logs_dir.glob("*.log")])
+
+    def save_run_results(self, project_id: str, run_id: str, results_data: Dict[str, Any]) -> Path:
+        """Saves execution results.json for a test run."""
+        run_dir = self.get_run_dir(project_id, run_id)
+        run_dir.mkdir(parents=True, exist_ok=True)
+        results_file = run_dir / "results.json"
+        with open(results_file, "w", encoding="utf-8") as f:
+            json.dump(results_data, f, indent=2)
+        return results_file
+
+    def load_run_results(self, project_id: str, run_id: str) -> Optional[Dict[str, Any]]:
+        """Loads execution results.json for a test run if it exists."""
+        results_file = self.get_run_dir(project_id, run_id) / "results.json"
+        if not results_file.exists():
+            return None
+        with open(results_file, "r", encoding="utf-8") as f:
+            return json.load(f)
 
     def list_test_files(self, project_id: str) -> List[Dict[str, Any]]:
         tests_dir = self.get_project_dir(project_id) / "tests"

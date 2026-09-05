@@ -54,6 +54,8 @@ class TestCase(db.Model):
     pass_fail_criteria = db.Column(db.Text, nullable=True)     # Explicit verification checklist
     script_path = db.Column(db.String(255), nullable=True)     # set when automated script is generated
     status = db.Column(db.String(50), default="pending_review")# pending_review, approved, marked_for_automation, automated, rejected
+    healing_notes = db.Column(db.Text, nullable=True)          # Diagnostic findings, failure attribution & advice for planner/generator
+    healing_status = db.Column(db.String(50), nullable=True)   # healthy, healed, app_defect, invalid_scenario, needs_script_fix
     execution_order = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -82,6 +84,8 @@ class TestCase(db.Model):
             "pass_fail_criteria": self.pass_fail_criteria,
             "script_path": self.script_path,
             "status": self.status,
+            "healing_notes": self.healing_notes,
+            "healing_status": self.healing_status,
             "execution_order": self.execution_order,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

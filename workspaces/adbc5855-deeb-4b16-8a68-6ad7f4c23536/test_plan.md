@@ -1,7 +1,7 @@
-# Test Plan: Automated Test Plan for n8n demo1 (v2)
+# Test Plan: Automated Test Plan for n8n demo (v3)
 
-Version: 2 | Status: active
-Generated: 2026-09-05 09:07:25 UTC
+Version: 3 | Status: active
+Generated: 2026-09-05 10:15:38 UTC
 
 ## Discovered Scenarios
 

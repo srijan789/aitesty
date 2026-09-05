@@ -418,11 +418,17 @@ class TestOrchestrator:
 
         def log_callback(level: str, message: str, metadata: Optional[Dict[str, Any]] = None):
             wm.append_run_log_file(project.id, run.id, level, message)
+            test_name = metadata.get("test_name") if metadata else None
+            scenario_id = metadata.get("scenario_id") if metadata else None
+            if test_name:
+                wm.append_test_log_file(project.id, run.id, test_name, level, message)
             log_entry = RunLog(
                 run_id=run.id,
                 level=level.upper(),
                 message=message,
                 metadata_json=json.dumps(metadata) if metadata else None,
+                test_name=test_name,
+                scenario_id=scenario_id,
             )
             db.session.add(log_entry)
             db.session.commit()
@@ -462,5 +468,158 @@ class TestOrchestrator:
             f"Execution finished. Passed: {summary.get('passed', 0)}, Failed: {summary.get('failed', 0)} "
             f"(Bugs: {summary.get('app_defects', 0)}, Automation: {summary.get('automation_failures', 0)})",
             summary,
+        )
+
+    @classmethod
+    def trigger_healing_analysis(
+        cls,
+        project_id: str,
+        run_ids: Optional[List[str]] = None,
+        trigger_source: str = "manual",
+    ) -> TestRun:
+        """
+        Triggers the Results Analysis & Healing Agent on selected test runs (or latest failed runs).
+        """
+        project = db.get_or_404(Project, project_id)
+        wm = cls.get_workspace_manager()
+
+        # If run_ids not provided, find the latest failed test execution run
+        if not run_ids:
+            latest_failed = (
+                TestRun.query.filter_by(project_id=project.id, run_type="test_execution")
+                .filter(TestRun.status.in_(["failed", "completed"]))
+                .order_by(TestRun.started_at.desc())
+                .first()
+            )
+            if latest_failed:
+                run_ids = [latest_failed.id]
+            else:
+                run_ids = []
+
+        run = TestRun(
+            project_id=project.id,
+            run_type="healing",
+            trigger=trigger_source,
+            status="queued",
+            summary_stats_json=json.dumps({
+                "target_runs": run_ids,
+                "failed_cases_analyzed": 0,
+                "app_defects_count": 0,
+                "automation_failures_count": 0,
+                "healed_tests_count": 0,
+                "invalid_tests_count": 0,
+            }),
+        )
+        db.session.add(run)
+        db.session.commit()
+
+        wm.init_run_dir(project.id, run.id)
+        run.run_dir = f"runs/{run.id}"
+        db.session.commit()
+
+        task_runner.submit_task(
+            run.id,
+            cls._run_healing_task,
+            project_id=project.id,
+            target_run_ids=run_ids,
+        )
+        return run
+
+    @classmethod
+    def _run_healing_task(
+        cls,
+        run_id: str,
+        cancel_event,
+        project_id: str,
+        target_run_ids: Optional[List[str]] = None,
+    ):
+        from app.agents.base import HealingConfig
+        from app.agents.registry import get_healing_agent
+
+        wm = cls.get_workspace_manager()
+        project = db.session.get(Project, project_id)
+        run = db.session.get(TestRun, run_id)
+
+        if not project or not run:
+            return
+
+        def log_callback(level: str, message: str, metadata: Optional[Dict[str, Any]] = None):
+            wm.append_run_log_file(project.id, run.id, level, message)
+            log_entry = RunLog(
+                run_id=run.id,
+                level=level.upper(),
+                message=message,
+                metadata_json=json.dumps(metadata) if metadata else None,
+            )
+            db.session.add(log_entry)
+            db.session.commit()
+
+        log_callback("INFO", f"Initializing Test Results Analysis & Healing run {run.id} for project '{project.name}'")
+
+        active_plan = TestPlan.query.filter_by(project_id=project.id, status="active").first()
+        scenarios_data = [tc.to_dict() for tc in active_plan.test_cases] if active_plan else []
+
+        # Gather run results from disk
+        project_dir = wm.get_project_dir(project.id)
+        run_results_list = []
+        for r_id in (target_run_ids or []):
+            res_file = project_dir / "runs" / r_id / "results.json"
+            if res_file.exists():
+                try:
+                    with open(res_file, "r", encoding="utf-8") as f:
+                        run_results_list.append(json.load(f))
+                except Exception:
+                    pass
+
+        config = HealingConfig(
+            project_id=project.id,
+            target_url=project.target_url,
+            workspace_dir=str(project_dir),
+            run_ids=target_run_ids or [],
+            scenarios=scenarios_data,
+            run_results=run_results_list,
+            prd_text=project.prd_text,
+            scope_instructions=project.scope_instructions,
+        )
+
+        agent_type = current_app.config.get("HEALER_AGENT_TYPE", "playwright")
+        healer = get_healing_agent(agent_type)
+
+        healing_result = healer.analyze_and_heal(
+            config=config,
+            log_callback=log_callback,
+            cancel_check=cancel_event.is_set,
+        )
+
+        if cancel_event.is_set():
+            run.status = "cancelled"
+            db.session.commit()
+            return
+
+        if healing_result.status == "failed":
+            run.status = "failed"
+            run.error_message = healing_result.error_message
+            db.session.commit()
+            return
+
+        stats = {
+            "target_runs": target_run_ids or [],
+            "failed_cases_analyzed": healing_result.failed_cases_analyzed,
+            "app_defects_count": healing_result.app_defects_count,
+            "automation_failures_count": healing_result.automation_failures_count,
+            "healed_tests_count": healing_result.healed_tests_count,
+            "invalid_tests_count": healing_result.invalid_tests_count,
+            "analyses": [a.to_dict() for a in healing_result.analyses],
+        }
+        run.set_summary_stats(stats)
+        run.status = "completed"
+        db.session.commit()
+
+        log_callback(
+            "INFO",
+            f"Healing Run Completed! Analyzed {healing_result.failed_cases_analyzed} failure(s): "
+            f"{healing_result.app_defects_count} App Defects, {healing_result.automation_failures_count} Automation Issues "
+            f"({healing_result.healed_tests_count} Healed, {healing_result.invalid_tests_count} Invalid).",
+            stats,
         )
 

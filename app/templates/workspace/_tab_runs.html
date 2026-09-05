@@ -9,6 +9,9 @@
       </div>
 
       <div class="flex items-center space-x-2">
+        <button type="button" onclick="triggerBatchHealing('{{ project.id }}')" id="btn-batch-heal" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 transition flex items-center">
+          <i class="fa-solid fa-wand-magic-sparkles mr-1.5 text-amber-500"></i>Heal Failures
+        </button>
         <button type="button" onclick="triggerExploration('{{ project.id }}')" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition">
           <i class="fa-solid fa-compass mr-1"></i>New Exploration
         </button>
@@ -23,7 +26,10 @@
         <table class="min-w-full divide-y divide-slate-200 text-xs">
           <thead class="bg-slate-50 text-slate-500 font-medium">
             <tr>
-              <th scope="col" class="px-6 py-3 text-left">Run ID</th>
+              <th scope="col" class="px-3 py-3 text-center w-8">
+                <input type="checkbox" id="select-all-runs-chk" class="w-3.5 h-3.5 rounded text-indigo-600 border-slate-300 focus:ring-indigo-500 cursor-pointer" onchange="toggleSelectAllRuns(this)">
+              </th>
+              <th scope="col" class="px-5 py-3 text-left">Run ID</th>
               <th scope="col" class="px-6 py-3 text-left">Type</th>
               <th scope="col" class="px-6 py-3 text-left">Status</th>
               <th scope="col" class="px-6 py-3 text-left">Trigger</th>
@@ -37,7 +43,10 @@
             {% for r in runs %}
               {% set stats = r.get_summary_stats() %}
               <tr class="hover:bg-slate-50/75 transition">
-                <td class="px-6 py-4 font-mono text-[11px] text-slate-700 font-semibold">
+                <td class="px-3 py-4 text-center">
+                  <input type="checkbox" class="run-select-chk w-3.5 h-3.5 rounded text-indigo-600 border-slate-300 focus:ring-indigo-500 cursor-pointer" data-run-id="{{ r.id }}" onchange="onRunSelectChange()">
+                </td>
+                <td class="px-5 py-4 font-mono text-[11px] text-slate-700 font-semibold">
                   <a href="{{ url_for('workspace_views.run_detail', project_id=project.id, run_id=r.id) }}" class="text-indigo-600 hover:underline">
                     {{ r.id[:8] }}...
                   </a>
@@ -50,6 +59,10 @@
                   {% elif r.run_type == 'test_generation' %}
                     <span class="inline-flex items-center text-teal-700 font-medium">
                       <i class="fa-solid fa-wand-magic-sparkles mr-1.5 text-teal-500"></i>Test Creation
+                    </span>
+                  {% elif r.run_type == 'healing' %}
+                    <span class="inline-flex items-center text-amber-700 font-medium">
+                      <i class="fa-solid fa-wand-magic-sparkles mr-1.5 text-amber-500"></i>Results Healing
                     </span>
                   {% else %}
                     <span class="inline-flex items-center text-emerald-700 font-medium">
@@ -79,6 +92,14 @@
                 <td class="px-6 py-4 text-slate-600">
                   {% if r.run_type == 'exploration' and stats.get('total_scenarios') is not none %}
                     <span class="font-bold text-slate-800">{{ stats.get('total_scenarios') }}</span> scenarios synthesized
+                  {% elif r.run_type == 'healing' %}
+                    <div class="space-y-0.5">
+                      <span class="font-bold text-amber-800">{{ stats.get('failed_cases_analyzed', 0) }}</span> failure(s) analyzed
+                      <div class="text-[11px] text-slate-500 font-medium">
+                        <span class="text-rose-600 font-semibold">{{ stats.get('app_defects_count', 0) }} bugs</span>,
+                        <span class="text-indigo-600 font-semibold">{{ stats.get('healed_tests_count', 0) }} healed</span>
+                      </div>
+                    </div>
                   {% elif r.run_type == 'test_generation' %}
                     <div class="space-y-1">
                       <div class="flex items-center space-x-1.5">
@@ -124,7 +145,12 @@
                 <td class="px-6 py-4 text-slate-500">
                   {{ r.started_at.strftime('%b %d, %H:%M:%S') if r.started_at else 'Queued' }}
                 </td>
-                <td class="px-6 py-4 text-right space-x-2">
+                <td class="px-6 py-4 text-right space-x-1.5">
+                  {% if (r.status == 'failed' or stats.get('failed', 0) > 0) and r.run_type == 'test_execution' %}
+                    <button type="button" onclick="triggerSingleHealing('{{ project.id }}', '{{ r.id }}')" class="inline-flex items-center text-xs font-semibold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded transition border border-amber-200" title="Run Healing Agent on this run">
+                      <i class="fa-solid fa-wand-magic-sparkles mr-1 text-amber-500"></i>Heal
+                    </button>
+                  {% endif %}
                   <button type="button" onclick="openRunLogsModal('{{ r.id }}')" class="inline-flex items-center text-xs font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded transition">
                     <i class="fa-solid fa-terminal mr-1 text-slate-400"></i>Logs
                   </button>
@@ -169,6 +195,62 @@
 </div>
 
 <script>
+  function toggleSelectAllRuns(master) {
+    const chks = document.querySelectorAll('.run-select-chk');
+    chks.forEach(c => c.checked = master.checked);
+    onRunSelectChange();
+  }
+
+  function onRunSelectChange() {
+    const selected = document.querySelectorAll('.run-select-chk:checked');
+    const btn = document.getElementById('btn-batch-heal');
+    if (btn) {
+      if (selected.length > 0) {
+        btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles mr-1.5 text-amber-500"></i>Heal Selected (${selected.length})`;
+      } else {
+        btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles mr-1.5 text-amber-500"></i>Heal Failures`;
+      }
+    }
+  }
+
+  async function triggerSingleHealing(projectId, runId) {
+    if (!confirm("Run Results Analysis & Healing Agent for this test run?")) return;
+    try {
+      const res = await fetch(`/api/projects/${projectId}/heal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ run_ids: [runId] }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        window.location.href = `/projects/${projectId}/runs/${data.run_id}`;
+      } else {
+        alert("Error: " + (data.error || "Could not launch healer."));
+      }
+    } catch (e) {
+      alert("Error: " + e.message);
+    }
+  }
+
+  async function triggerBatchHealing(projectId) {
+    const selected = Array.from(document.querySelectorAll('.run-select-chk:checked')).map(c => c.dataset.runId);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/heal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ run_ids: selected.length > 0 ? selected : undefined }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        window.location.href = `/projects/${projectId}/runs/${data.run_id}`;
+      } else {
+        alert("Error: " + (data.error || "Could not launch healer."));
+      }
+    } catch (e) {
+      alert("Error: " + e.message);
+    }
+  }
+
   async function openRunLogsModal(runId) {
     const modal = document.getElementById('quick-logs-modal');
     const title = document.getElementById('quick-logs-modal-title');

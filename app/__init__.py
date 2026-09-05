@@ -42,6 +42,10 @@ def create_app(config_class=Config):
                     "ALTER TABLE test_cases ADD COLUMN preconditions TEXT",
                     "ALTER TABLE test_cases ADD COLUMN pass_fail_criteria TEXT",
                     "ALTER TABLE test_cases ADD COLUMN priority VARCHAR(10) DEFAULT 'P1'",
+                    "ALTER TABLE test_cases ADD COLUMN healing_notes TEXT",
+                    "ALTER TABLE test_cases ADD COLUMN healing_status VARCHAR(50)",
+                    "ALTER TABLE run_logs ADD COLUMN test_name VARCHAR(150)",
+                    "ALTER TABLE run_logs ADD COLUMN scenario_id VARCHAR(50)",
                 ]:
                     try:
                         conn.execute(text(col_sql))

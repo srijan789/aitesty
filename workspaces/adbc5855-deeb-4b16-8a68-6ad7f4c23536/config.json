@@ -1,6 +1,6 @@
 {
-  "id": "098d583d-5429-4f9c-8941-2b059558881f",
-  "name": "n8n demo1",
+  "id": "adbc5855-deeb-4b16-8a68-6ad7f4c23536",
+  "name": "n8n demo",
   "description": "",
   "target_url": "http://localhost:5678",
   "auth_type": "form",
@@ -10,6 +10,6 @@
   },
   "scope_instructions": "",
   "prd_text": "",
-  "created_at": "2026-09-05T09:01:39.578929",
-  "updated_at": "2026-09-05T09:01:39.582385"
+  "created_at": "2026-09-05T10:08:03.436348",
+  "updated_at": "2026-09-05T10:08:03.439686"
 }

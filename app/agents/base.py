@@ -145,3 +145,95 @@ class BaseGeneratorAgent(ABC):
         """
         pass
 
+@dataclass
+class HealingConfig:
+    project_id: str
+    target_url: str
+    workspace_dir: str
+    run_ids: List[str]                  # Selected run IDs to analyze
+    scenarios: List[Dict[str, Any]] = field(default_factory=list) # Active scenarios from test plan
+    run_results: List[Dict[str, Any]] = field(default_factory=list) # Parsed results from each run
+    prd_text: Optional[str] = None
+    scope_instructions: Optional[str] = None
+
+@dataclass
+class FailedCaseAnalysis:
+    test_name: str
+    scenario_id: Optional[str]
+    scenario_title: Optional[str]
+    file_name: Optional[str]
+    status: str                         # "failed"
+    failure_origin: str                 # "PRODUCT_DEFECT" | "AUTOMATION_FAILURE" | "UNKNOWN"
+    verdict: str                        # "NEEDS_FIX" | "INVALID_TESTCASE" | "REAL_BUG"
+    summary: str
+    root_cause: str
+    notes_for_planner: str              # Actionable notes for the QA planner
+    notes_for_generator: str            # Guidance for test generation/patching
+    suggested_fix: Optional[str] = None
+    suggested_selectors: List[str] = field(default_factory=list)
+    confidence: float = 0.90
+    raw_error: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "test_name": self.test_name,
+            "scenario_id": self.scenario_id,
+            "scenario_title": self.scenario_title,
+            "file_name": self.file_name,
+            "status": self.status,
+            "failure_origin": self.failure_origin,
+            "verdict": self.verdict,
+            "summary": self.summary,
+            "root_cause": self.root_cause,
+            "notes_for_planner": self.notes_for_planner,
+            "notes_for_generator": self.notes_for_generator,
+            "suggested_fix": self.suggested_fix,
+            "suggested_selectors": self.suggested_selectors,
+            "confidence": self.confidence,
+            "raw_error": self.raw_error,
+        }
+
+@dataclass
+class HealingResult:
+    status: str                         # "success" | "failed" | "cancelled"
+    analyzed_runs: List[str] = field(default_factory=list)
+    failed_cases_analyzed: int = 0
+    app_defects_count: int = 0
+    automation_failures_count: int = 0
+    healed_tests_count: int = 0
+    invalid_tests_count: int = 0
+    analyses: List[FailedCaseAnalysis] = field(default_factory=list)
+    artifacts_created: List[str] = field(default_factory=list)
+    error_message: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "status": self.status,
+            "analyzed_runs": self.analyzed_runs,
+            "failed_cases_analyzed": self.failed_cases_analyzed,
+            "app_defects_count": self.app_defects_count,
+            "automation_failures_count": self.automation_failures_count,
+            "healed_tests_count": self.healed_tests_count,
+            "invalid_tests_count": self.invalid_tests_count,
+            "analyses": [a.to_dict() for a in self.analyses],
+            "artifacts_created": self.artifacts_created,
+            "error_message": self.error_message,
+        }
+
+class BaseHealingAgent(ABC):
+    """
+    Contract for Test Results Analysis & Healing Sub-Agents.
+    Examines failed test runs, performs failure attribution (App Defect vs Automation Failure),
+    decides whether the testcase needs healing vs is invalid, and generates notes for
+    the planning and generator agents.
+    """
+
+    @abstractmethod
+    def analyze_and_heal(
+        self,
+        config: HealingConfig,
+        log_callback: Callable[[str, str, Optional[Dict[str, Any]]], None],
+        cancel_check: Optional[Callable[[], bool]] = None,
+    ) -> HealingResult:
+        pass
+

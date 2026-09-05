@@ -36,6 +36,8 @@ class TestRunner:
         self.runs_dir = self.workspace_dir / "runs" / run_id
         self.screenshots_dir = self.runs_dir / "screenshots"
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
+        self.test_logs_dir = self.runs_dir / "test_logs"
+        self.test_logs_dir.mkdir(parents=True, exist_ok=True)
 
     def discover_test_files(
         self,
@@ -296,9 +298,15 @@ class TestRunner:
         scenario_id = test_info.get("scenario_id")
         telemetry = TestTelemetryLogger(test_name=test_name, scenario_id=scenario_id)
 
+        def test_cb(level: str, msg: str, meta: Optional[Dict[str, Any]] = None):
+            m = dict(meta or {})
+            m["test_name"] = test_name
+            m["scenario_id"] = scenario_id
+            log_callback(level, msg, m)
+
         # 1. Immediate failure if target server is offline
         if not server_alive:
-            log_callback("ERROR", f"    [FAIL] Cannot execute {test_name}: {server_error_msg}")
+            test_cb("ERROR", f"    [FAIL] Cannot execute {test_name}: {server_error_msg}")
             telemetry.log_step(
                 step_number=1,
                 action="Navigate",
@@ -323,6 +331,7 @@ class TestRunner:
             out["title"] = test_info.get("title") or test_name
             out["scenario_title"] = test_info.get("scenario_title")
             out["category"] = test_info.get("category", "functional")
+            self._write_test_log_file(out)
             return out
 
         # 2. Server is online: Execute real Playwright browser test or real HTTP probe
@@ -370,14 +379,14 @@ class TestRunner:
                         raise AssertionError(f"Page navigation to {self.target_url} returned HTTP status {res.status if res else 'None'}")
 
                     telemetry.log_step(1, "Navigate", self.target_url, f"HTTP {res.status} loaded", nav_dur)
-                    log_callback("INFO", f"    [Step 1] Navigate -> {self.target_url} (HTTP {res.status})")
+                    test_cb("INFO", f"    [Step 1] Navigate -> {self.target_url} (HTTP {res.status})")
 
                     # Step 2: Element checks
                     t1 = time.time()
                     page.wait_for_selector("body", timeout=4000)
                     body_dur = int((time.time() - t1) * 1000)
                     telemetry.log_step(2, "Assert", "body", f"DOM rendered ({page.title()})", body_dur)
-                    log_callback("INFO", f"    [Step 2] Assert -> body visible, Title: '{page.title()}'")
+                    test_cb("INFO", f"    [Step 2] Assert -> body visible, Title: '{page.title()}'")
 
                     # Scan interactive DOM elements for healer context
                     try:
@@ -429,7 +438,7 @@ class TestRunner:
                         outcome=f"HTTP {resp.status_code} - Verified Live Response",
                         duration_ms=dur,
                     )
-                    log_callback("INFO", f"    [Step {idx}] {action} -> {clean_step[:60]}")
+                    test_cb("INFO", f"    [Step {idx}] {action} -> {clean_step[:60]}")
 
             telemetry.mark_passed()
 
@@ -449,7 +458,87 @@ class TestRunner:
         out["title"] = test_info.get("title") or test_name
         out["scenario_title"] = test_info.get("scenario_title")
         out["category"] = test_info.get("category", "functional")
+        self._write_test_log_file(out)
         return out
+
+    def _write_test_log_file(self, out: Dict[str, Any]):
+        """Persists isolated, formatted per-testcase execution log to runs/<run_id>/test_logs/<test_name>.log"""
+        test_name = out.get("test_name", "test")
+        clean_name = "".join(c for c in test_name if c.isalnum() or c in ("-", "_")).strip() or "test"
+        log_file = self.test_logs_dir / f"{clean_name}.log"
+
+        lines = [
+            "=" * 60,
+            f"TESTCASE LOG: {test_name}",
+            f"Title: {out.get('title', test_name)}",
+            f"Scenario: {out.get('scenario_title', 'N/A')} (ID: {out.get('scenario_id', 'N/A')})",
+            f"File: {out.get('file_name', 'N/A')} | Category: {out.get('category', 'functional')}",
+            f"Status: {out.get('status', 'unknown').upper()} | Duration: {out.get('duration_ms', 0)}ms",
+            f"Timestamp: {out.get('started_at', '')}",
+            "=" * 60 + "\n",
+        ]
+
+        # Execution steps
+        steps = out.get("steps") or []
+        if steps:
+            lines.append("--- STEP EXECUTION TRACE ---")
+            for s in steps:
+                st_num = s.get("step_number", 1)
+                st_act = s.get("action", "")
+                st_tgt = s.get("target", "")
+                st_out = s.get("outcome", "")
+                st_dur = s.get("duration_ms", 0)
+                target_str = f" on '{st_tgt}'" if st_tgt else ""
+                lines.append(f"[{s.get('status', 'PASSED').upper()}] Step {st_num}: {st_act}{target_str} -> {st_out} ({st_dur}ms)")
+            lines.append("")
+
+        # Network requests
+        network_events = out.get("network_events") or []
+        if network_events:
+            lines.append("--- NETWORK REQUESTS ---")
+            for n in network_events:
+                lines.append(f"[{n.get('timestamp', '')}] {n.get('method', 'GET')} {n.get('url', '')} -> HTTP {n.get('status', 200)} ({n.get('duration_ms', 0)}ms)")
+            lines.append("")
+
+        # Console logs
+        console_messages = out.get("console_messages") or []
+        if console_messages:
+            lines.append("--- BROWSER CONSOLE MESSAGES ---")
+            for c in console_messages:
+                lines.append(f"[{c.get('timestamp', '')}] [{str(c.get('type', 'info')).upper()}] {c.get('text', '')}")
+            lines.append("")
+
+        # Failure & Healer classification
+        error_details = out.get("error_details")
+        if error_details:
+            lines.append("--- FAILURE DIAGNOSTICS & HEALER ATTRIBUTION ---")
+            clf = error_details.get("classification") or {}
+            lines.append(f"Classification: {clf.get('classification', 'UNKNOWN')} ({clf.get('subtype', 'N/A')})")
+            lines.append(f"Summary: {clf.get('summary', '')}")
+            if clf.get("root_cause_analysis"):
+                lines.append(f"Root Cause: {clf.get('root_cause_analysis')}")
+            if clf.get("suggested_fix"):
+                lines.append(f"Suggested Fix: {clf.get('suggested_fix')}")
+            if clf.get("alternative_selectors"):
+                lines.append(f"Alternative Selectors: {', '.join(clf['alternative_selectors'])}")
+            lines.append(f"Error Message: {error_details.get('error_message', '')}")
+            if error_details.get("traceback"):
+                lines.append(f"\nTraceback:\n{error_details['traceback']}")
+            lines.append("")
+
+        # Internal debug logs
+        debug_logs = out.get("debug_logs") or []
+        if debug_logs:
+            lines.append("--- DETAILED DEBUG LOGS ---")
+            for d in debug_logs:
+                lines.append(f"[{d.get('timestamp', '')}] [{d.get('level', 'INFO')}] {d.get('message', '')}")
+            lines.append("")
+
+        try:
+            with open(log_file, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+        except Exception as e:
+            logger.warning(f"Could not write isolated test log file {log_file}: {e}")
 
     def _save_reports(self, full_results: Dict[str, Any], log_callback: Callable):
         """Saves results.json and report.html to runs/<run_id>/"""

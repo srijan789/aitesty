@@ -1,0 +1,117 @@
+{
+  "id": "b23623b2-0f8d-4148-898b-d5f38b0a0c47",
+  "project_id": "adbc5855-deeb-4b16-8a68-6ad7f4c23536",
+  "version": 3,
+  "status": "active",
+  "summary": "Automated Test Plan for n8n demo (v3)",
+  "raw_markdown": "# Test Plan: Automated Test Plan for n8n demo (v3)\n\nVersion: 3 | Status: active\nGenerated: 2026-09-05 10:11:23 UTC\n\n## Discovered Scenarios\n\n### \u2705 Happy Path Scenarios\n\n#### [P0] Initial Application Load & Core View Render (Workflows - n8n) `(pending_review)`\nValidate that a visitor navigating to http://localhost:5678/home/workflows receives a valid HTTP 200 and primary views render without errors.\n\n**Preconditions:** Browser launched with clean cookies and active internet connection.\n\n**Execution Steps:**\n1. Navigate on `http://localhost:5678/home/workflows` -> HTTP 200 response with DOM ready\n2. Assert on `body` -> Page title matches 'Workflows - n8n'\n3. Assert on `header, nav` -> Primary navigation elements rendered\n\n**Expected Output:** Application renders layout, navigation bar, and primary landing components.\n\n**Pass / Fail Criteria:** PASS: HTTP status is 200, page loads within 5s, zero uncaught JS console errors.\nFAIL: White screen, HTTP 4xx/5xx, or crash alert.\n\n---\n\n### \u26a0\ufe0f Edge Cases & Boundary Conditions\n\n#### [P1] Input Boundary & Form Validation Probing `(pending_review)`\nProbe input fields with boundary lengths (255+ characters), emojis, and whitespace-only submissions.\n\n**Preconditions:** Navigate to http://localhost:5678/home/workflows with accessible interactive forms.\n\n**Execution Steps:**\n1. Navigate on `http://localhost:5678/home/workflows` -> Form visible\n2. Fill on `input` -> Enter string with special characters and boundary length\n3. Click on `button[type='submit']` -> Form triggers client or server validation\n\n**Expected Output:** Client or server validates input gracefully without exposing stack traces.\n\n**Pass / Fail Criteria:** PASS: Validation banner or field error is displayed, input is sanitized.\nFAIL: Server 500 error, page crash, or raw SQL/exception leak.\n\n---\n\n### \ud83d\uded1 Error Handling & Negative Flows\n\n#### [P1] Invalid Route & Error Boundary Handling `(pending_review)`\nVerify graceful user feedback when navigating to a non-existent URL or encountering broken links.\n\n**Preconditions:** Standard unauthenticated user session.\n\n**Execution Steps:**\n1. Navigate on `http://localhost:5678/home/workflows/non-existent-qa-route-404` -> Route requested\n2. Assert on `body` -> Clean 404 error page displayed with Home link\n\n**Expected Output:** Custom 404 page is displayed with navigation to return home.\n\n**Pass / Fail Criteria:** PASS: User-friendly 404 message visible, back to safety link functional.\nFAIL: Raw web server debug page, unhandled exception, or blank screen.\n\n---\n",
+  "created_at": "2026-09-05T10:11:23.518637",
+  "updated_at": "2026-09-05T10:11:23.519669",
+  "scenarios": [
+    {
+      "id": "912b5b07-b5ae-4ee3-85aa-3f5e5dc1cf33",
+      "test_plan_id": "b23623b2-0f8d-4148-898b-d5f38b0a0c47",
+      "title": "Initial Application Load & Core View Render (Workflows - n8n)",
+      "category": "happy_path",
+      "priority": "P0",
+      "preconditions": "Browser launched with clean cookies and active internet connection.",
+      "description": "Validate that a visitor navigating to http://localhost:5678/home/workflows receives a valid HTTP 200 and primary views render without errors.",
+      "steps": [
+        {
+          "step_number": 1,
+          "action": "Navigate",
+          "target_element": "http://localhost:5678/home/workflows",
+          "expected_outcome": "HTTP 200 response with DOM ready"
+        },
+        {
+          "step_number": 2,
+          "action": "Assert",
+          "target_element": "body",
+          "expected_outcome": "Page title matches 'Workflows - n8n'"
+        },
+        {
+          "step_number": 3,
+          "action": "Assert",
+          "target_element": "header, nav",
+          "expected_outcome": "Primary navigation elements rendered"
+        }
+      ],
+      "expected_result": "Application renders layout, navigation bar, and primary landing components.",
+      "pass_fail_criteria": "PASS: HTTP status is 200, page loads within 5s, zero uncaught JS console errors.\nFAIL: White screen, HTTP 4xx/5xx, or crash alert.",
+      "script_path": "tests/test_01_happy_path_initial_application_load_core_.spec.py",
+      "status": "automated",
+      "healing_notes": "[PRODUCT_DEFECT] [REAL_BUG]: Target application at localhost:5678 is offline or unreachable with Connection Refused.\n\nRoot Cause: The test suite failed during navigation because the target service at http://localhost:5678 is down or not accepting connections (Connection refused: [Errno 61]).\n\nNotes for Planner: The target application server (n8n on localhost:5678) is offline or unreachable ([Errno 61] Connection refused). Escalate to infrastructure/devops/engineering to ensure the service is running before executing automation suites.\n\nNotes for Generator: Do not modify test logic or selectors at this time. The test failure is caused by an unreachable target server (Connection refused at localhost:5678). Once the backend/application container is running and healthy, re-run the test without script changes.\n\nSuggested Fix: Start the target application service on localhost:5678 before executing the test suite.",
+      "healing_status": "app_defect",
+      "execution_order": 0,
+      "created_at": "2026-09-05T10:11:23.521059"
+    },
+    {
+      "id": "5d00db18-8496-4bd9-acd3-cbd094b8c18c",
+      "test_plan_id": "b23623b2-0f8d-4148-898b-d5f38b0a0c47",
+      "title": "Input Boundary & Form Validation Probing",
+      "category": "edge_case",
+      "priority": "P1",
+      "preconditions": "Navigate to http://localhost:5678/home/workflows with accessible interactive forms.",
+      "description": "Probe input fields with boundary lengths (255+ characters), emojis, and whitespace-only submissions.",
+      "steps": [
+        {
+          "step_number": 1,
+          "action": "Navigate",
+          "target_element": "http://localhost:5678/home/workflows",
+          "expected_outcome": "Form visible"
+        },
+        {
+          "step_number": 2,
+          "action": "Fill",
+          "target_element": "input",
+          "expected_outcome": "Enter string with special characters and boundary length"
+        },
+        {
+          "step_number": 3,
+          "action": "Click",
+          "target_element": "button[type='submit']",
+          "expected_outcome": "Form triggers client or server validation"
+        }
+      ],
+      "expected_result": "Client or server validates input gracefully without exposing stack traces.",
+      "pass_fail_criteria": "PASS: Validation banner or field error is displayed, input is sanitized.\nFAIL: Server 500 error, page crash, or raw SQL/exception leak.",
+      "script_path": "tests/test_02_edge_case_input_boundary_form_validation.spec.py",
+      "status": "automated",
+      "healing_notes": "[PRODUCT_DEFECT] [REAL_BUG]: Target application server at http://localhost:5678 is offline or unreachable (Connection Refused).\n\nRoot Cause: The target web application server at localhost:5678 is offline or not running, causing Errno 61 Connection refused when attempting initial navigation.\n\nNotes for Planner: Target application server at http://localhost:5678 failed to establish connection (Connection Refused). Verify application deployment/service health before re-executing this test suite.\n\nNotes for Generator: No script locator healing possible at this time because the target application server at http://localhost:5678 is unreachable/down. Ensure server availability check before re-running.\n\nSuggested Fix: Start and verify the web service on port 5678 prior to test execution.",
+      "healing_status": "app_defect",
+      "execution_order": 1,
+      "created_at": "2026-09-05T10:11:23.521065"
+    },
+    {
+      "id": "9fb3096c-a661-4d5b-99aa-cae142e57933",
+      "test_plan_id": "b23623b2-0f8d-4148-898b-d5f38b0a0c47",
+      "title": "Invalid Route & Error Boundary Handling",
+      "category": "error_flow",
+      "priority": "P1",
+      "preconditions": "Standard unauthenticated user session.",
+      "description": "Verify graceful user feedback when navigating to a non-existent URL or encountering broken links.",
+      "steps": [
+        {
+          "step_number": 1,
+          "action": "Navigate",
+          "target_element": "http://localhost:5678/home/workflows/non-existent-qa-route-404",
+          "expected_outcome": "Route requested"
+        },
+        {
+          "step_number": 2,
+          "action": "Assert",
+          "target_element": "body",
+          "expected_outcome": "Clean 404 error page displayed with Home link"
+        }
+      ],
+      "expected_result": "Custom 404 page is displayed with navigation to return home.",
+      "pass_fail_criteria": "PASS: User-friendly 404 message visible, back to safety link functional.\nFAIL: Raw web server debug page, unhandled exception, or blank screen.",
+      "script_path": "tests/test_03_error_flow_invalid_route_error_boundary_h.spec.py",
+      "status": "automated",
+      "healing_notes": "[PRODUCT_DEFECT] [REAL_BUG]: Application server is offline or refusing connections on http://localhost:5678, resulting in ConnectionRefused error.\n\nRoot Cause: The test execution failed during initial navigation because the target application server at http://localhost:5678 is offline or unreachable (Connection Refused, Errno 61).\n\nNotes for Planner: Application environment is offline / unreachable. Verify that backend/frontend services are healthy and running on port 5678 before triggering automation suites.\n\nNotes for Generator: No test script changes required. Ensure the application server is running and responding on http://localhost:5678 before re-executing this test.\n\nSuggested Fix: Start and verify the target application server on port 5678 before running the test suite.",
+      "healing_status": "app_defect",
+      "execution_order": 2,
+      "created_at": "2026-09-05T10:11:23.521068"
+    }
+  ]
+}

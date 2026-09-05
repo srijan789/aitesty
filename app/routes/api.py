@@ -440,3 +440,144 @@ def get_run_report_html(run_id):
     html = generate_html_report(results, project_name="Project", run_id=run.id)
     return Response(html, mimetype="text/html")
 
+
+@api_bp.route("/runs/<run_id>/testcases", methods=["GET"])
+def get_run_testcases(run_id):
+    run = db.get_or_404(TestRun, run_id)
+    wm = get_wm()
+    run_dir = wm.get_run_dir(run.project_id, run.id)
+    json_path = run_dir / "results.json"
+    
+    test_log_names = set(wm.list_test_log_files(run.project_id, run.id))
+    testcases = []
+
+    if json_path.exists():
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                for t in data.get("tests", []):
+                    t_name = t.get("test_name", "test")
+                    testcases.append({
+                        "test_name": t_name,
+                        "title": t.get("title") or t_name,
+                        "scenario_title": t.get("scenario_title"),
+                        "scenario_id": t.get("scenario_id"),
+                        "file_name": t.get("file_name"),
+                        "status": t.get("status", "unknown"),
+                        "duration_ms": t.get("duration_ms", 0),
+                        "category": t.get("category", "functional"),
+                        "has_isolated_log": t_name in test_log_names or bool(wm.read_test_log_file(run.project_id, run.id, t_name)),
+                        "classification": t.get("error_details", {}).get("classification"),
+                    })
+        except Exception as e:
+            logger.warning(f"Error reading results.json for run {run.id}: {e}")
+
+    # Fallback to test_log files if results.json not yet available
+    if not testcases and test_log_names:
+        for t_name in sorted(list(test_log_names)):
+            testcases.append({
+                "test_name": t_name,
+                "title": t_name.replace("test_", "").replace("_", " ").title(),
+                "has_isolated_log": True,
+                "status": "completed",
+            })
+
+    return jsonify({
+        "success": True,
+        "run_id": run.id,
+        "status": run.status,
+        "testcases_count": len(testcases),
+        "testcases": testcases,
+    })
+
+
+@api_bp.route("/runs/<run_id>/testcases/<test_name>/logs", methods=["GET"])
+def get_testcase_logs(run_id, test_name):
+    run = db.get_or_404(TestRun, run_id)
+    wm = get_wm()
+    
+    # 1. Read isolated raw log file
+    raw_log = wm.read_test_log_file(run.project_id, run.id, test_name)
+    
+    # 2. Query DB RunLog for tagged logs
+    db_logs = (
+        RunLog.query.filter(RunLog.run_id == run.id, RunLog.test_name == test_name)
+        .order_by(RunLog.id.asc())
+        .all()
+    )
+    formatted_db_logs = [log.to_dict() for log in db_logs]
+
+    # 3. Read specific test telemetry from results.json
+    telemetry_data = None
+    json_path = wm.get_run_dir(run.project_id, run.id) / "results.json"
+    if json_path.exists():
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                for t in data.get("tests", []):
+                    if t.get("test_name") == test_name:
+                        telemetry_data = t
+                        break
+        except Exception:
+            pass
+
+    return jsonify({
+        "success": True,
+        "run_id": run.id,
+        "test_name": test_name,
+        "raw_log": raw_log or "",
+        "log_file_found": bool(raw_log),
+        "db_logs": formatted_db_logs,
+        "structured_logs": formatted_db_logs,
+        "telemetry": telemetry_data,
+    })
+
+
+@api_bp.route("/projects/<project_id>/heal", methods=["POST"])
+def trigger_healing(project_id):
+    project = db.get_or_404(Project, project_id)
+    data = request.get_json(silent=True) or {}
+    run_ids = data.get("run_ids")
+    if isinstance(run_ids, str):
+        run_ids = [run_ids]
+
+    run = TestOrchestrator.trigger_healing_analysis(
+        project_id=project.id,
+        run_ids=run_ids,
+        trigger_source="api",
+    )
+    return jsonify({
+        "success": True,
+        "run_id": run.id,
+        "status": run.status,
+        "target_runs": run_ids or "latest_failed",
+        "message": "Results Analysis & Healing Agent queued.",
+    }), 202
+
+
+@api_bp.route("/runs/<run_id>/healing", methods=["GET"])
+def get_run_healing_report(run_id):
+    run = db.get_or_404(TestRun, run_id)
+    wm = get_wm()
+    run_dir = wm.get_run_dir(run.project_id, run.id)
+    heal_path = run_dir / "healing_report.json"
+    if heal_path.exists():
+        with open(heal_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return jsonify({
+                "success": True,
+                "report": data,
+                **data
+            })
+
+    # If this run itself is of type healing, return summary stats
+    if run.run_type == "healing":
+        return jsonify({
+            "run_id": run.id,
+            "status": run.status,
+            "summary": run.get_summary_stats(),
+        })
+
+    return jsonify({"message": "No healing report generated for this run.", "run_id": run.id}), 404
+
+
