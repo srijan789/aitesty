@@ -28,7 +28,7 @@ def create_app(config_class=Config):
 
     # Auto-create tables in development/testing
     with app.app_context():
-        from app.models import Project, TestPlan, TestCase, TestRun, RunLog  # noqa: F401
+        from app.models import Project, TestPlan, TestCase, TestRun, RunLog, PipelineRun, HealerAttempt  # noqa: F401
         db.create_all()
 
     # Template filters/helpers

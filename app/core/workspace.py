@@ -152,6 +152,26 @@ class WorkspaceManager:
 
         return "\n".join(lines)
 
+    def save_pipeline_report(self, project_id: str, report_data: Dict[str, Any], markdown_content: str = "") -> Dict[str, Path]:
+        project_dir = self.get_project_dir(project_id)
+        json_path = project_dir / "pipeline_report.json"
+        md_path = project_dir / "pipeline_report.md"
+
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(report_data, f, indent=2)
+
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write(markdown_content)
+
+        return {"json_path": json_path, "md_path": md_path}
+
+    def load_pipeline_report_json(self, project_id: str) -> Optional[Dict[str, Any]]:
+        json_path = self.get_project_dir(project_id) / "pipeline_report.json"
+        if not json_path.exists():
+            return None
+        with open(json_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
     def init_run_dir(self, project_id: str, run_id: str) -> Path:
         run_dir = self.get_project_dir(project_id) / "runs" / run_id
         run_dir.mkdir(parents=True, exist_ok=True)

@@ -12,6 +12,12 @@ class Config:
     WORKSPACES_ROOT = Path(os.environ.get("WORKSPACES_ROOT", BASE_DIR / "workspaces"))
     MAX_CONCURRENT_TASKS = int(os.environ.get("MAX_CONCURRENT_TASKS", 4))
     EXPLORER_AGENT_TYPE = os.environ.get("EXPLORER_AGENT_TYPE", "mock")
+    GENERATOR_AGENT_TYPE = os.environ.get("GENERATOR_AGENT_TYPE", "mock")
+    HEALER_AGENT_TYPE = os.environ.get("HEALER_AGENT_TYPE", "mock")
+
+    MAX_REPLAN_CYCLES = int(os.environ.get("MAX_REPLAN_CYCLES", 2))
+    MAX_HEAL_ATTEMPTS = int(os.environ.get("MAX_HEAL_ATTEMPTS", 3))
+    COVERAGE_THRESHOLD = float(os.environ.get("COVERAGE_THRESHOLD", 0.6))
 
 class TestingConfig(Config):
     TESTING = True

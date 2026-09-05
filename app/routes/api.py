@@ -4,8 +4,10 @@ from app.extensions import db
 from app.models.project import Project
 from app.models.test_plan import TestPlan, TestCase
 from app.models.test_run import TestRun, RunLog
+from app.models.pipeline_run import PipelineRun
 from app.core.workspace import WorkspaceManager
 from app.core.orchestrator import TestOrchestrator
+from app.core.pipeline_orchestrator import PipelineOrchestrator
 from app.core.task_runner import task_runner
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
@@ -38,6 +40,50 @@ def trigger_test_execution(project_id):
         }), 202
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+@api_bp.route("/projects/<project_id>/pipeline/run", methods=["POST"])
+def trigger_pipeline(project_id):
+    try:
+        data = request.get_json(silent=True) or {}
+        pipeline_run = PipelineOrchestrator.trigger_pipeline(
+            project_id,
+            trigger_source="api",
+            product_requirements=data.get("product_requirements"),
+            natural_language_intent=data.get("natural_language_intent"),
+        )
+        return jsonify({
+            "success": True,
+            "pipeline_run_id": pipeline_run.id,
+            "status": pipeline_run.status,
+            "message": "Autonomous test pipeline queued.",
+        }), 202
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@api_bp.route("/pipeline-runs/<pipeline_run_id>/status", methods=["GET"])
+def get_pipeline_status(pipeline_run_id):
+    pipeline_run = db.get_or_404(PipelineRun, pipeline_run_id)
+    return jsonify(pipeline_run.to_dict())
+
+@api_bp.route("/pipeline-runs/<pipeline_run_id>/report", methods=["GET"])
+def get_pipeline_report(pipeline_run_id):
+    pipeline_run = db.get_or_404(PipelineRun, pipeline_run_id)
+    if pipeline_run.status != "completed":
+        return jsonify({"message": f"Pipeline run is '{pipeline_run.status}'; report not yet available."}), 409
+    return jsonify(pipeline_run.get_final_report())
+
+@api_bp.route("/pipeline-runs/<pipeline_run_id>/cancel", methods=["POST"])
+def cancel_pipeline(pipeline_run_id):
+    pipeline_run = db.get_or_404(PipelineRun, pipeline_run_id)
+    if pipeline_run.status in ["completed", "failed", "cancelled"]:
+        return jsonify({"success": False, "message": f"Pipeline run is already {pipeline_run.status}."}), 400
+
+    cancelled = task_runner.cancel_task(pipeline_run_id)
+    if not cancelled:
+        pipeline_run.status = "cancelled"
+        db.session.commit()
+
+    return jsonify({"success": True, "message": "Cancellation signal sent."})
 
 @api_bp.route("/runs/<run_id>/status", methods=["GET"])
 def get_run_status(run_id):

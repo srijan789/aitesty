@@ -84,10 +84,9 @@ def test_full_exploration_and_test_execution_flow(client, app):
         assert plan_json_path.exists()
         assert plan_md_path.exists()
 
-        # Check generated test script
-        test_file = ws_root / proj_id / "tests" / "test_auth_flow.spec.py"
-        assert test_file.exists()
-        assert "Autonomous Generated Playwright Test Suite" in test_file.read_text()
+        # The Planner no longer writes test files itself -- that's the Generator stage's job,
+        # so the workspace tests/ dir stays empty after exploration alone.
+        assert list((ws_root / proj_id / "tests").glob("*")) == []
 
     # 5. Fetch plan via API
     res = client.get(f"/api/projects/{proj_id}/test-plan")
@@ -108,7 +107,9 @@ def test_full_exploration_and_test_execution_flow(client, app):
         updated_plan = TestPlan.query.filter_by(project_id=proj_id, status="active").first()
         assert updated_plan.test_cases[0].title == "Updated Custom Scenario Title"
 
-    # 7. Trigger test execution run
+    # 7. Trigger test execution run -- no test files exist yet since the standalone "Explore
+    #    Now" flow only runs the Planner; generating executable specs is the Generator stage's
+    #    job (exercised together with the rest of the pipeline in test_pipeline_orchestrator.py).
     res = client.post(f"/api/projects/{proj_id}/execute-tests")
     assert res.status_code == 202
     test_run_id = res.get_json()["run_id"]
@@ -123,8 +124,8 @@ def test_full_exploration_and_test_execution_flow(client, app):
             test_completed = True
             assert run_status["status"] == "completed"
             stats = run_status["summary_stats"]
-            assert stats["passed"] >= 2
-            assert stats["failed"] == 0
+            assert stats["total"] == 0
+            assert stats["passed"] == 0
             break
 
     assert test_completed is True, "Test execution run did not complete in time"

@@ -27,25 +27,60 @@ class TestOrchestrator:
         return WorkspaceManager(workspaces_root)
 
     @classmethod
-    def trigger_exploration(cls, project_id: str, trigger_source: str = "manual") -> TestRun:
-        project = db.get_or_404(Project, project_id)
+    def create_stage_run(
+        cls,
+        project: Project,
+        run_type: str,
+        trigger_source: str = "manual",
+        pipeline_run_id: Optional[str] = None,
+        attempt_number: int = 1,
+        summary_stats: Optional[Dict[str, Any]] = None,
+    ) -> TestRun:
+        """
+        Creates a TestRun row + its workspace run directory. Shared by the ad-hoc single-stage
+        triggers below and by PipelineOrchestrator, which tags each stage with pipeline_run_id
+        so the existing per-run log streaming/UI works unchanged for pipeline-driven runs too.
+        """
         wm = cls.get_workspace_manager()
-
-        # Create TestRun record
         run = TestRun(
             project_id=project.id,
-            run_type="exploration",
+            pipeline_run_id=pipeline_run_id,
+            run_type=run_type,
+            attempt_number=attempt_number,
             trigger=trigger_source,
             status="queued",
-            summary_stats_json=json.dumps({"total_scenarios": 0, "routes_found": 0}),
+            summary_stats_json=json.dumps(summary_stats or {}),
         )
         db.session.add(run)
         db.session.commit()
 
-        # Initialize filesystem artifacts directory
-        run_dir = wm.init_run_dir(project.id, run.id)
+        wm.init_run_dir(project.id, run.id)
         run.run_dir = f"runs/{run.id}"
         db.session.commit()
+        return run
+
+    @classmethod
+    def make_log_callback(cls, wm: WorkspaceManager, project: Project, run: TestRun):
+        """Builds a log_callback(level, message, metadata) closure shared by every stage runner."""
+        def log_callback(level: str, message: str, metadata: Optional[Dict[str, Any]] = None):
+            wm.append_run_log_file(project.id, run.id, level, message)
+            log_entry = RunLog(
+                run_id=run.id,
+                level=level.upper(),
+                message=message,
+                metadata_json=json.dumps(metadata) if metadata else None,
+            )
+            db.session.add(log_entry)
+            db.session.commit()
+        return log_callback
+
+    @classmethod
+    def trigger_exploration(cls, project_id: str, trigger_source: str = "manual") -> TestRun:
+        project = db.get_or_404(Project, project_id)
+        run = cls.create_stage_run(
+            project, "exploration", trigger_source,
+            summary_stats={"total_scenarios": 0, "routes_found": 0},
+        )
 
         # Submit to background task runner
         task_runner.submit_task(run.id, cls._run_exploration_task, project_id=project.id)
@@ -60,17 +95,7 @@ class TestOrchestrator:
         if not project or not run:
             return
 
-        def log_callback(level: str, message: str, metadata: Optional[Dict[str, Any]] = None):
-            wm.append_run_log_file(project.id, run.id, level, message)
-            log_entry = RunLog(
-                run_id=run.id,
-                level=level.upper(),
-                message=message,
-                metadata_json=json.dumps(metadata) if metadata else None,
-            )
-            db.session.add(log_entry)
-            db.session.commit()
-
+        log_callback = cls.make_log_callback(wm, project, run)
         log_callback("INFO", f"Starting exploration run {run.id} for project '{project.name}'")
 
         agent_type = current_app.config.get("EXPLORER_AGENT_TYPE", "mock")
@@ -87,24 +112,42 @@ class TestOrchestrator:
             run_id=run.id,
         )
 
-        result = agent.explore(
-            config=config,
-            log_callback=log_callback,
-            cancel_check=cancel_event.is_set,
-        )
+        cls.run_planner_agent(project, run, agent, config, log_callback, cancel_event.is_set)
+
+    @classmethod
+    def run_planner_agent(
+        cls,
+        project: Project,
+        run: TestRun,
+        agent,
+        config: ExplorerConfig,
+        log_callback,
+        cancel_check,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Invokes a Planner (BaseExplorerAgent) instance, persists the resulting TestPlan/TestCases
+        to the DB and workspace filesystem, and updates `run`'s status/stats accordingly.
+        Returns the plan dict on success, or None if the run did not complete successfully
+        (`run.status` is already set to "cancelled"/"failed" in that case).
+
+        Shared by the ad-hoc "Explore Now" trigger (`_run_exploration_task`) and
+        `PipelineOrchestrator`'s planning stage, including bounded re-plan attempts.
+        """
+        wm = cls.get_workspace_manager()
+        result = agent.explore(config=config, log_callback=log_callback, cancel_check=cancel_check)
 
         if result.status == "cancelled":
             log_callback("WARN", "Exploration run was cancelled.")
             run.status = "cancelled"
             db.session.commit()
-            return
+            return None
 
         if result.status == "failed":
             log_callback("ERROR", f"Exploration failed: {result.error_message}")
             run.status = "failed"
             run.error_message = result.error_message
             db.session.commit()
-            return
+            return None
 
         # Exploration Succeeded: Ingest into database models & workspace files
         log_callback("INFO", "Persisting test plan and scenarios to database and workspace filesystem...")
@@ -139,7 +182,10 @@ class TestOrchestrator:
             )
             test_case.set_steps(s.steps)
             db.session.add(test_case)
-            scenarios_json_list.append(s.to_dict())
+            db.session.flush()  # populate test_case.id so downstream stages can reference it
+            scenario_dict = s.to_dict()
+            scenario_dict["id"] = test_case.id
+            scenarios_json_list.append(scenario_dict)
 
         # Build plan JSON & Markdown and write to disk
         plan_dict = {
@@ -152,7 +198,7 @@ class TestOrchestrator:
             "scenarios": scenarios_json_list,
         }
 
-        paths = wm.save_test_plan(project.id, plan_dict, result.markdown_plan)
+        wm.save_test_plan(project.id, plan_dict, result.markdown_plan)
         new_plan.raw_markdown = wm.load_test_plan_md(project.id)
 
         stats = {
@@ -167,25 +213,15 @@ class TestOrchestrator:
         db.session.commit()
 
         log_callback("INFO", f"Test Plan v{new_version} successfully generated and committed.", stats)
+        return plan_dict
 
     @classmethod
     def trigger_test_execution(cls, project_id: str, trigger_source: str = "manual") -> TestRun:
         project = db.get_or_404(Project, project_id)
-        wm = cls.get_workspace_manager()
-
-        run = TestRun(
-            project_id=project.id,
-            run_type="test_execution",
-            trigger=trigger_source,
-            status="queued",
-            summary_stats_json=json.dumps({"passed": 0, "failed": 0, "skipped": 0, "total": 0}),
+        run = cls.create_stage_run(
+            project, "test_execution", trigger_source,
+            summary_stats={"passed": 0, "failed": 0, "skipped": 0, "total": 0},
         )
-        db.session.add(run)
-        db.session.commit()
-
-        wm.init_run_dir(project.id, run.id)
-        run.run_dir = f"runs/{run.id}"
-        db.session.commit()
 
         task_runner.submit_task(run.id, cls._run_test_execution_task, project_id=project.id)
         return run
@@ -200,16 +236,7 @@ class TestOrchestrator:
         if not project or not run:
             return
 
-        def log_callback(level: str, message: str, metadata: Optional[Dict[str, Any]] = None):
-            wm.append_run_log_file(project.id, run.id, level, message)
-            log_entry = RunLog(
-                run_id=run.id,
-                level=level.upper(),
-                message=message,
-                metadata_json=json.dumps(metadata) if metadata else None,
-            )
-            db.session.add(log_entry)
-            db.session.commit()
+        log_callback = cls.make_log_callback(wm, project, run)
 
         log_callback("INFO", f"Initializing test execution run {run.id} for project '{project.name}'")
         test_files = wm.list_test_files(project.id)

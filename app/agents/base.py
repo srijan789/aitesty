@@ -11,6 +11,10 @@ class ExplorerConfig:
     scope_instructions: Optional[str]
     workspace_dir: str
     run_id: str
+    # Planner re-plan loop support (all optional/defaulted -> backward compatible)
+    product_requirements: Optional[str] = None
+    coverage_feedback: List[str] = field(default_factory=list)
+    attempt_number: int = 1
 
 @dataclass
 class ScenarioStep:
@@ -75,5 +79,121 @@ class BaseExplorerAgent(ABC):
         :param log_callback: callable(level, message, metadata) to emit real-time logs
         :param cancel_check: callable returning True if cancellation was requested
         :return: ExplorerResult
+        """
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Generator Sub-Agent Contract
+# ---------------------------------------------------------------------------
+
+@dataclass
+class GeneratorConfig:
+    project_id: str
+    target_url: str
+    auth_type: str
+    credentials: Dict[str, Any]
+    workspace_dir: str
+    run_id: str
+    plan: Dict[str, Any]  # the current TestPlan dict (scenarios + discovered_routes)
+
+
+@dataclass
+class GeneratedTestFile:
+    relative_path: str  # relative to the project workspace, e.g. "tests/test_auth_flow.spec.py"
+    content: str
+    covers_test_case_ids: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "relative_path": self.relative_path,
+            "covers_test_case_ids": self.covers_test_case_ids,
+        }
+
+
+@dataclass
+class GeneratorResult:
+    status: str  # "success" | "failed"
+    files: List[GeneratedTestFile] = field(default_factory=list)
+    validation_report: Dict[str, Any] = field(default_factory=dict)  # per-scenario selector/assertion validation notes
+    error_message: Optional[str] = None
+
+
+class BaseGeneratorAgent(ABC):
+    """
+    Contract for Generator Sub-Agents. Converts a test plan into executable test file contents
+    with live selector/assertion validation against the target application. Implementations must
+    NOT write to disk themselves -- the orchestrator persists `files` via WorkspaceManager so path
+    sanitization stays centralized.
+    """
+
+    @abstractmethod
+    def generate(
+        self,
+        config: GeneratorConfig,
+        log_callback: Callable[[str, str, Optional[Dict[str, Any]]], None],
+        cancel_check: Optional[Callable[[], bool]] = None,
+    ) -> GeneratorResult:
+        """
+        Produces executable test files from a structured test plan.
+        :param config: GeneratorConfig instance
+        :param log_callback: callable(level, message, metadata) to emit real-time logs
+        :param cancel_check: callable returning True if cancellation was requested
+        :return: GeneratorResult
+        """
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Healer Sub-Agent Contract
+# ---------------------------------------------------------------------------
+
+@dataclass
+class HealerConfig:
+    project_id: str
+    workspace_dir: str
+    run_id: str
+    test_case_id: str
+    script_path: Optional[str]
+    failure_output: str
+    attempt_number: int = 1
+    max_attempts: int = 3
+
+
+@dataclass
+class HealerResult:
+    status: str  # "resolved" | "unresolved" | "escalated"
+    classification: str = "unknown"  # "script_bug" | "app_defect" | "unknown"
+    action_taken: Optional[str] = None  # "repaired_script" | "recommended_fix" | "escalated"
+    updated_script_content: Optional[str] = None
+    recommendation_text: Optional[str] = None
+    confidence: float = 0.0
+    error_message: Optional[str] = None
+
+
+class BaseHealerAgent(ABC):
+    """
+    Contract for Healer Sub-Agents. Replays a failing test and classifies the failure as a
+    broken test script (a stale/changed locator, timing, or workflow step) vs a genuine
+    application defect. For a script bug, it repairs the locator/workflow directly. For a
+    suspected application defect it never modifies application code -- it only reports the
+    classification and a recommended fix for a human to review. Implementations must NOT write
+    to disk themselves -- the orchestrator persists `updated_script_content` via WorkspaceManager
+    so path sanitization stays centralized.
+    """
+
+    @abstractmethod
+    def heal(
+        self,
+        config: HealerConfig,
+        log_callback: Callable[[str, str, Optional[Dict[str, Any]]], None],
+        cancel_check: Optional[Callable[[], bool]] = None,
+    ) -> HealerResult:
+        """
+        Attempts to diagnose and repair a single failing test.
+        :param config: HealerConfig instance
+        :param log_callback: callable(level, message, metadata) to emit real-time logs
+        :param cancel_check: callable returning True if cancellation was requested
+        :return: HealerResult
         """
         pass

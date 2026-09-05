@@ -26,8 +26,12 @@ class TaskRunner:
         # re-initialize executor if needed
         self.executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="AitestyTask")
 
-    def submit_task(self, run_id: str, target_fn: Callable, *args, **kwargs) -> bool:
-        """Submits a background task wrapped in app context and error boundaries."""
+    def submit_task(self, run_id: str, target_fn: Callable, *args, run_model=None, **kwargs) -> bool:
+        """
+        Submits a background task wrapped in app context and error boundaries.
+        :param run_model: the SQLAlchemy model class to track status on (defaults to TestRun).
+                           Pass PipelineRun when run_id identifies a PipelineRun row instead.
+        """
         with self._lock:
             if run_id in self._active_tasks and self._active_tasks[run_id]["status"] == "running":
                 logger.warning(f"Task for run {run_id} is already active.")
@@ -50,9 +54,9 @@ class TaskRunner:
 
             if app:
                 with app.app_context():
-                    self._execute_with_tracking(run_id, cancel_event, target_fn, *args, **kwargs)
+                    self._execute_with_tracking(run_id, cancel_event, target_fn, run_model, *args, **kwargs)
             else:
-                self._execute_with_tracking(run_id, cancel_event, target_fn, *args, **kwargs)
+                self._execute_with_tracking(run_id, cancel_event, target_fn, run_model, *args, **kwargs)
 
         future = self.executor.submit(runner_wrapper)
         with self._lock:
@@ -61,13 +65,14 @@ class TaskRunner:
 
         return True
 
-    def _execute_with_tracking(self, run_id: str, cancel_event: threading.Event, fn: Callable, *args, **kwargs):
+    def _execute_with_tracking(self, run_id: str, cancel_event: threading.Event, fn: Callable, run_model=None, *args, **kwargs):
         from app.extensions import db
         from app.models.test_run import TestRun, RunLog
 
-        run = db.session.get(TestRun, run_id)
+        model_cls = run_model or TestRun
+        run = db.session.get(model_cls, run_id)
         if not run:
-            logger.error(f"Cannot execute task: TestRun {run_id} not found in DB.")
+            logger.error(f"Cannot execute task: {model_cls.__name__} {run_id} not found in DB.")
             return
 
         run.status = "running"
@@ -93,14 +98,16 @@ class TaskRunner:
             tb = traceback.format_exc()
             run.status = "failed"
             run.error_message = str(e)
-            
-            # Record error in DB RunLog
-            err_log = RunLog(
-                run_id=run_id,
-                level="ERROR",
-                message=f"Execution failed: {str(e)}\n{tb}",
-            )
-            db.session.add(err_log)
+
+            # Record error in DB RunLog (per-stage TestRun runs only; PipelineRun has no
+            # standalone log stream of its own -- its nested TestRun stages carry the detail)
+            if model_cls is TestRun:
+                err_log = RunLog(
+                    run_id=run_id,
+                    level="ERROR",
+                    message=f"Execution failed: {str(e)}\n{tb}",
+                )
+                db.session.add(err_log)
         finally:
             run.completed_at = datetime.utcnow()
             run.duration_ms = int((time.time() - start_time) * 1000)
