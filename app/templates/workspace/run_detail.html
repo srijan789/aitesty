@@ -20,6 +20,8 @@
         <h1 class="text-xl font-bold text-slate-900 tracking-tight">
           {% if run.run_type == 'exploration' %}
             Autonomous Exploration Run
+          {% elif run.run_type == 'test_generation' %}
+            Autonomous Test Creation Run
           {% else %}
             Playwright Test Suite Run
           {% endif %}
@@ -52,6 +54,13 @@
 
     <!-- Actions -->
     <div class="flex items-center space-x-3">
+      {% if run.run_type == 'test_execution' and run.status in ['completed', 'failed'] %}
+        <a href="/api/runs/{{ run.id }}/report/html" target="_blank"
+          class="inline-flex items-center px-4 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-600/20 transition">
+          <i class="fa-solid fa-file-invoice mr-1.5"></i>View Quality Report
+        </a>
+      {% endif %}
+
       {% if run.status in ['queued', 'running'] %}
         <button type="button" onclick="cancelActiveRun('{{ run.id }}')" id="btn-cancel-run"
           class="inline-flex items-center px-4 py-2 rounded-xl text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition">
@@ -75,11 +84,19 @@
     </div>
     <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
       <div class="text-slate-400 font-medium">
-        {% if run.run_type == 'exploration' %}Scenarios Synthesized{% else %}Tests Passed{% endif %}
+        {% if run.run_type == 'exploration' %}
+          Scenarios Synthesized
+        {% elif run.run_type == 'test_generation' %}
+          Scenarios Automated
+        {% else %}
+          Tests Passed
+        {% endif %}
       </div>
       <div id="stat-primary" class="text-base font-bold text-emerald-600 mt-1">
         {% if run.run_type == 'exploration' %}
           {{ stats.get('total_scenarios', '--') }}
+        {% elif run.run_type == 'test_generation' %}
+          {{ stats.get('scenarios_automated', '--') }}
         {% else %}
           {{ stats.get('passed', 0) }} / {{ stats.get('total', 0) }}
         {% endif %}
@@ -87,13 +104,22 @@
     </div>
     <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
       <div class="text-slate-400 font-medium">
-        {% if run.run_type == 'exploration' %}Routes Discovered{% else %}Failed / Skipped{% endif %}
+        {% if run.run_type == 'exploration' %}
+          Routes Discovered
+        {% elif run.run_type == 'test_generation' %}
+          Spec Files Created
+        {% else %}
+          Bugs vs Auto Failures
+        {% endif %}
       </div>
       <div id="stat-secondary" class="text-base font-bold text-slate-800 mt-1">
         {% if run.run_type == 'exploration' %}
           {{ stats.get('routes_discovered', '--') }}
+        {% elif run.run_type == 'test_generation' %}
+          {{ stats.get('files_created', '--') }}
         {% else %}
-          {{ stats.get('failed', 0) }}
+          <span class="text-rose-600 font-bold">{{ stats.get('app_defects', 0) }} bugs</span>,
+          <span class="text-amber-600 font-bold">{{ stats.get('automation_failures', 0) }} script</span>
         {% endif %}
       </div>
     </div>
@@ -104,6 +130,7 @@
       </div>
     </div>
   </div>
+
 
   <!-- Live Terminal Console -->
   <div class="bg-slate-900 rounded-2xl border border-slate-800 shadow-xl overflow-hidden flex flex-col min-h-[500px]">
@@ -133,6 +160,14 @@
           <option value="ERROR">ERROR Only</option>
         </select>
 
+        <button type="button" onclick="toggleRawLogs()" id="btn-toggle-raw" class="text-[11px] text-slate-400 hover:text-slate-200">
+          <i class="fa-solid fa-file-lines mr-1"></i><span id="raw-toggle-label">Raw View</span>
+        </button>
+
+        <a href="/api/runs/{{ run.id }}/logs/raw" download="run_{{ run.id[:8] }}.log" class="text-[11px] text-slate-400 hover:text-slate-200">
+          <i class="fa-solid fa-download mr-1"></i>Download
+        </a>
+
         <button type="button" onclick="clearConsoleDisplay()" class="text-[11px] text-slate-400 hover:text-slate-200">
           <i class="fa-solid fa-eraser mr-1"></i>Clear
         </button>
@@ -141,11 +176,34 @@
 
     <!-- Monospace Terminal Output Container -->
     <div id="terminal-output" class="flex-1 p-5 font-mono text-xs text-slate-100 overflow-y-auto space-y-1.5 leading-relaxed selection:bg-indigo-500 selection:text-white max-h-[600px]">
-      <!-- Log items dynamically injected here -->
-      <div class="text-slate-500 text-[11px] italic" id="terminal-init-msg">Connecting to log stream for run {{ run.id }}...</div>
+      {% if run.logs.count() > 0 %}
+        {% for log in run.logs.all() %}
+          <div class="log-entry flex items-start space-x-2.5 hover:bg-slate-800/50 px-1.5 py-0.5 rounded transition" data-level="{{ log.level }}">
+            <span class="text-slate-500 select-none text-[11px] shrink-0 font-mono">[{{ log.timestamp.strftime('%H:%M:%S') if log.timestamp else '--:--:--' }}]</span>
+            <span class="px-1.5 py-0.2 rounded border text-[10px] font-bold tracking-wider shrink-0 uppercase font-mono {% if log.level == 'ERROR' %}text-rose-400 bg-rose-950/60 border-rose-800{% elif log.level == 'WARN' %}text-amber-400 bg-amber-950/60 border-amber-800{% elif log.level == 'DEBUG' %}text-slate-400 bg-slate-950/60 border-slate-800{% else %}text-blue-400 bg-blue-950/60 border-blue-800{% endif %}">
+              {{ log.level }}
+            </span>
+            <span class="text-slate-200 flex-1 break-words">{{ log.message }}</span>
+          </div>
+        {% endfor %}
+      {% elif raw_logs %}
+        {% for line in raw_logs.strip().split('\n') %}
+          <div class="log-entry flex items-start space-x-2 px-1.5 py-0.5 text-slate-300 font-mono text-xs">
+            <span class="text-slate-200 flex-1 break-words">{{ line }}</span>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="text-slate-500 text-[11px] italic" id="terminal-init-msg">Connecting to log stream for run {{ run.id }}...</div>
+      {% endif %}
+    </div>
+
+    <!-- Raw Verbatim Logs Container (Hidden by default) -->
+    <div id="raw-logs-view" class="hidden flex-1 p-5 font-mono text-xs text-slate-300 overflow-y-auto max-h-[600px] bg-slate-950">
+      <pre class="whitespace-pre-wrap leading-relaxed">{{ raw_logs or 'No log entries recorded yet.' }}</pre>
     </div>
   </div>
 </div>
+
 {% endblock %}
 
 {% block extra_scripts %}
@@ -167,5 +225,22 @@
       alert("Error: " + e.message);
     }
   }
+
+  function toggleRawLogs() {
+    const formatted = document.getElementById('terminal-output');
+    const raw = document.getElementById('raw-logs-view');
+    const label = document.getElementById('raw-toggle-label');
+    if (!formatted || !raw) return;
+    if (raw.classList.contains('hidden')) {
+      raw.classList.remove('hidden');
+      formatted.classList.add('hidden');
+      if (label) label.textContent = 'Console View';
+    } else {
+      raw.classList.add('hidden');
+      formatted.classList.remove('hidden');
+      if (label) label.textContent = 'Raw View';
+    }
+  }
 </script>
 {% endblock %}
+

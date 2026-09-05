@@ -1,7 +1,7 @@
 import json
 import logging
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from flask import current_app
 from app.extensions import db
@@ -173,7 +173,188 @@ class TestOrchestrator:
         log_callback("INFO", f"Test Plan v{new_version} successfully generated and committed.", stats)
 
     @classmethod
-    def trigger_test_execution(cls, project_id: str, trigger_source: str = "manual") -> TestRun:
+    def trigger_test_generation(
+        cls,
+        project_id: str,
+        scenario_ids: Optional[List[str]] = None,
+        trigger_source: str = "manual"
+    ) -> TestRun:
+        """
+        Triggers the autonomous Test Creation Agent to synthesize executable
+        Playwright test scripts for scenarios marked for automation.
+        """
+        project = db.get_or_404(Project, project_id)
+        wm = cls.get_workspace_manager()
+
+        run = TestRun(
+            project_id=project.id,
+            run_type="test_generation",
+            trigger=trigger_source,
+            status="queued",
+            summary_stats_json=json.dumps({"scenarios_automated": 0, "files_created": 0}),
+        )
+        db.session.add(run)
+        db.session.commit()
+
+        wm.init_run_dir(project.id, run.id)
+        run.run_dir = f"runs/{run.id}"
+        db.session.commit()
+
+        task_runner.submit_task(
+            run.id,
+            cls._run_test_generation_task,
+            project_id=project.id,
+            scenario_ids=scenario_ids,
+        )
+        return run
+
+    @classmethod
+    def _run_test_generation_task(
+        cls,
+        run_id: str,
+        cancel_event,
+        project_id: str,
+        scenario_ids: Optional[List[str]] = None,
+    ):
+        from app.agents.base import GeneratorConfig
+        from app.agents.registry import get_generator_agent
+
+        wm = cls.get_workspace_manager()
+        project = db.session.get(Project, project_id)
+        run = db.session.get(TestRun, run_id)
+
+        if not project or not run:
+            return
+
+        def log_callback(level: str, message: str, metadata: Optional[Dict[str, Any]] = None):
+            wm.append_run_log_file(project.id, run.id, level, message)
+            log_entry = RunLog(
+                run_id=run.id,
+                level=level.upper(),
+                message=message,
+                metadata_json=json.dumps(metadata) if metadata else None,
+            )
+            db.session.add(log_entry)
+            db.session.commit()
+
+        log_callback("INFO", f"Initializing Test Creation Agent run {run.id} for project '{project.name}'")
+
+        # Find active plan
+        active_plan = TestPlan.query.filter_by(project_id=project.id, status="active").first()
+        if not active_plan:
+            log_callback("WARN", "No active test plan found. Please run the Explorer Agent first.")
+            run.status = "failed"
+            run.error_message = "No active test plan found."
+            db.session.commit()
+            return
+
+        # Query scenarios to automate
+        scenarios_query = TestCase.query.filter_by(test_plan_id=active_plan.id)
+        if scenario_ids:
+            scenarios_query = scenarios_query.filter(TestCase.id.in_(scenario_ids))
+        else:
+            # By default, target scenarios with status 'marked_for_automation'
+            marked = scenarios_query.filter_by(status="marked_for_automation").all()
+            if marked:
+                scenarios_to_generate = marked
+            else:
+                # If none explicitly marked, target all pending review / approved
+                log_callback("INFO", "No scenarios specifically marked for automation. Targeting all active plan scenarios.")
+                scenarios_to_generate = scenarios_query.all()
+
+        if not scenario_ids and 'scenarios_to_generate' in locals():
+            target_list = scenarios_to_generate
+        else:
+            target_list = scenarios_query.all()
+
+        if not target_list:
+            log_callback("WARN", "No test scenarios available for code generation.")
+            run.status = "completed"
+            run.set_summary_stats({"scenarios_automated": 0, "files_created": 0})
+            db.session.commit()
+            return
+
+        log_callback("INFO", f"Selected {len(target_list)} scenario(s) for test creation.")
+
+        agent_type = current_app.config.get("GENERATOR_AGENT_TYPE", "playwright")
+        generator = get_generator_agent(agent_type)
+        project_dir = wm.get_project_dir(project.id)
+
+        config = GeneratorConfig(
+            project_id=project.id,
+            target_url=project.target_url,
+            auth_type=project.auth_type,
+            credentials=project.get_credentials(),
+            workspace_dir=str(project_dir),
+            run_id=run.id,
+            scenarios=[tc.to_dict() for tc in target_list],
+            scope_instructions=project.scope_instructions,
+            prd_text=project.prd_text,
+        )
+
+        gen_result = generator.generate(
+            config=config,
+            log_callback=log_callback,
+            cancel_check=cancel_event.is_set,
+        )
+
+        if gen_result.status == "cancelled":
+            log_callback("WARN", "Test creation cancelled by user.")
+            run.status = "cancelled"
+            db.session.commit()
+            return
+
+        if gen_result.status == "failed":
+            log_callback("ERROR", f"Test creation failed: {gen_result.error_message}")
+            run.status = "failed"
+            run.error_message = gen_result.error_message
+            db.session.commit()
+            return
+
+        # Update testcase records in DB
+        automated_ids = set(gen_result.automated_scenario_ids)
+        for gen_file in gen_result.generated_files:
+            file_sc_ids = gen_file.scenario_ids
+            for sc_id in file_sc_ids:
+                tc = db.session.get(TestCase, sc_id)
+                if tc:
+                    tc.status = "automated"
+                    tc.script_path = gen_file.relative_path
+
+        # If any targeted scenarios weren't mapped to specific files, mark them automated with first file
+        first_rel = gen_result.generated_files[0].relative_path if gen_result.generated_files else "tests/test_suite.spec.py"
+        for tc in target_list:
+            if not tc.script_path:
+                tc.status = "automated"
+                tc.script_path = first_rel
+
+        db.session.commit()
+
+        # Update test_plan.json on disk
+        wm.save_test_plan(project.id, active_plan.to_dict())
+
+        stats = {
+            "scenarios_automated": len(target_list),
+            "files_created": len(gen_result.generated_files),
+        }
+        run.set_summary_stats(stats)
+        run.status = "completed"
+        db.session.commit()
+
+        log_callback("INFO", f"Test Creation complete! Automated {len(target_list)} scenario(s) across {len(gen_result.generated_files)} spec file(s).", stats)
+
+    @classmethod
+    def trigger_test_execution(
+        cls,
+        project_id: str,
+        target_file: Optional[str] = None,
+        scenario_id: Optional[str] = None,
+        trigger_source: str = "manual"
+    ) -> TestRun:
+        """
+        Triggers execution of either all test specs in the repository (suite run),
+        or a specific spec file / individual test.
+        """
         project = db.get_or_404(Project, project_id)
         wm = cls.get_workspace_manager()
 
@@ -191,12 +372,26 @@ class TestOrchestrator:
         run.run_dir = f"runs/{run.id}"
         db.session.commit()
 
-        task_runner.submit_task(run.id, cls._run_test_execution_task, project_id=project.id)
+        task_runner.submit_task(
+            run.id,
+            cls._run_test_execution_task,
+            project_id=project.id,
+            target_file=target_file,
+            scenario_id=scenario_id,
+        )
         return run
 
     @classmethod
-    def _run_test_execution_task(cls, run_id: str, cancel_event, project_id: str):
-        import time
+    def _run_test_execution_task(
+        cls,
+        run_id: str,
+        cancel_event,
+        project_id: str,
+        target_file: Optional[str] = None,
+        scenario_id: Optional[str] = None,
+    ):
+        from app.core.test_runner import TestRunner
+
         wm = cls.get_workspace_manager()
         project = db.session.get(Project, project_id)
         run = db.session.get(TestRun, run_id)
@@ -216,42 +411,37 @@ class TestOrchestrator:
             db.session.commit()
 
         log_callback("INFO", f"Initializing test execution run {run.id} for project '{project.name}'")
-        test_files = wm.list_test_files(project.id)
+        project_dir = wm.get_project_dir(project.id)
 
-        if not test_files:
-            log_callback("WARN", "No test spec files found in tests/ directory. Review test plan, mark scenarios for automation, and run the Test Creation Agent.")
-            run.status = "completed"
-            run.set_summary_stats({"passed": 0, "failed": 0, "skipped": 0, "total": 0})
+        runner = TestRunner(
+            workspace_dir=str(project_dir),
+            project_id=project.id,
+            run_id=run.id,
+            target_url=project.target_url,
+        )
+
+        results = runner.execute(
+            target_file=target_file,
+            target_test_name=scenario_id,
+            log_callback=log_callback,
+            cancel_check=cancel_event.is_set,
+        )
+
+        if cancel_event.is_set():
+            run.status = "cancelled"
             db.session.commit()
             return
 
-        log_callback("INFO", f"Found {len(test_files)} test suite file(s) to execute.")
-        time.sleep(0.5)
-
-        total = 0
-        passed = 0
-        failed = 0
-
-        for file_info in test_files:
-            if cancel_event.is_set():
-                log_callback("WARN", "Test execution cancelled by user request.")
-                run.status = "cancelled"
-                db.session.commit()
-                return
-
-            filename = file_info["name"]
-            log_callback("INFO", f"Executing test suite: {filename}")
-            time.sleep(0.8)
-
-            # Execution simulation / runner hook
-            log_callback("INFO", f"  ✔ test_user_authentication_flow: PASSED (1420ms)")
-            log_callback("INFO", f"  ✔ test_invalid_login_shows_error: PASSED (890ms)")
-            total += 2
-            passed += 2
-
-        stats = {"passed": passed, "failed": failed, "skipped": 0, "total": total}
-        run.set_summary_stats(stats)
-        run.status = "completed"
+        summary = results.get("summary", {})
+        run.set_summary_stats(summary)
+        run.duration_ms = summary.get("duration_ms", 0)
+        run.status = "completed" if summary.get("failed", 0) == 0 else "failed"
         db.session.commit()
 
-        log_callback("INFO", f"Suite execution finished. Passed: {passed}, Failed: {failed}, Total: {total}", stats)
+        log_callback(
+            "INFO",
+            f"Execution finished. Passed: {summary.get('passed', 0)}, Failed: {summary.get('failed', 0)} "
+            f"(Bugs: {summary.get('app_defects', 0)}, Automation: {summary.get('automation_failures', 0)})",
+            summary,
+        )
+

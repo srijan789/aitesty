@@ -233,6 +233,69 @@ async function bulkMarkForAutomation(projectId) {
   }
 }
 
+async function deleteScenario(projectId, scenarioId, btnEl) {
+  const card = btnEl ? btnEl.closest('.scenario-card') : document.querySelector(`.scenario-card[data-scenario-id="${scenarioId}"]`);
+  const titleEl = card ? card.querySelector('h4') : null;
+  const title = titleEl ? titleEl.textContent.trim() : 'this scenario';
+
+  if (!confirm(`Are you sure you want to delete scenario "${title}"?`)) {
+    return;
+  }
+
+  if (btnEl) btnEl.disabled = true;
+
+  try {
+    const res = await fetch(`/api/projects/${projectId}/scenarios/${scenarioId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await res.json();
+    if (data.success) {
+      if (card) {
+        card.style.transition = 'all 0.25s ease-out';
+        card.style.opacity = '0';
+        card.style.transform = 'scale(0.95)';
+        setTimeout(() => {
+          const section = card.closest('.scenario-category-section');
+          card.remove();
+
+          // Update category header count
+          if (section) {
+            const categoryCards = section.querySelectorAll('.scenario-card');
+            const catHeader = section.querySelector('h3');
+            if (catHeader) {
+              const catTitle = catHeader.textContent.split('(')[0].trim();
+              catHeader.textContent = `${catTitle} (${categoryCards.length})`;
+            }
+            if (categoryCards.length === 0) {
+              const emptyMsg = document.createElement('p');
+              emptyMsg.className = 'text-xs text-slate-400 italic bg-white p-4 rounded-xl border border-slate-200';
+              emptyMsg.textContent = 'No scenarios remaining in this category.';
+              section.appendChild(emptyMsg);
+            }
+          }
+
+          // Update total counter in toolbar
+          const totalScenariosEl = document.getElementById('total-scenarios-count');
+          if (totalScenariosEl) {
+            const currentTotal = document.querySelectorAll('.scenario-card').length;
+            totalScenariosEl.textContent = `${currentTotal} Total Scenarios`;
+          }
+
+          // Update marked counter
+          updateMarkedCounter();
+        }, 250);
+      }
+    } else {
+      alert("Failed to delete scenario: " + (data.error || data.message || "Unknown error"));
+      if (btnEl) btnEl.disabled = false;
+    }
+  } catch (err) {
+    alert("Network error: " + err.message);
+    if (btnEl) btnEl.disabled = false;
+  }
+}
+
 function updateMarkedCounter() {
   const cards = document.querySelectorAll('.scenario-card');
   let markedCount = 0;

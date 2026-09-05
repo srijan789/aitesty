@@ -228,3 +228,14 @@ class WorkspaceManager:
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
         return file_path
+
+    def delete_test_file(self, project_id: str, relative_path: str) -> bool:
+        """Safely delete a test file within the project tests/ directory."""
+        safe_rel = relative_path.lstrip("/").replace("../", "")
+        if not safe_rel.startswith("tests/"):
+            raise ValueError("Can only delete files within tests/ directory")
+        file_path = self.get_project_dir(project_id) / safe_rel
+        if file_path.exists() and file_path.is_file():
+            file_path.unlink()
+            return True
+        return False

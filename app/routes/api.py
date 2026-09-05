@@ -26,18 +26,47 @@ def trigger_exploration(project_id):
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-@api_bp.route("/projects/<project_id>/execute-tests", methods=["POST"])
-def trigger_test_execution(project_id):
+@api_bp.route("/projects/<project_id>/generate-tests", methods=["POST"])
+def trigger_test_generation(project_id):
     try:
-        run = TestOrchestrator.trigger_test_execution(project_id, trigger_source="api")
+        data = request.get_json(silent=True) or {}
+        scenario_ids = data.get("scenario_ids")
+        run = TestOrchestrator.trigger_test_generation(
+            project_id=project_id,
+            scenario_ids=scenario_ids,
+            trigger_source="api",
+        )
         return jsonify({
             "success": True,
             "run_id": run.id,
             "status": run.status,
+            "message": "Test creation agent queued.",
+        }), 202
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@api_bp.route("/projects/<project_id>/execute-tests", methods=["POST"])
+def trigger_test_execution(project_id):
+    try:
+        data = request.get_json(silent=True) or {}
+        target_file = data.get("target_file")
+        scenario_id = data.get("scenario_id")
+        run = TestOrchestrator.trigger_test_execution(
+            project_id=project_id,
+            target_file=target_file,
+            scenario_id=scenario_id,
+            trigger_source="api",
+        )
+        return jsonify({
+            "success": True,
+            "run_id": run.id,
+            "status": run.status,
+            "target_file": target_file,
             "message": "Test execution queued.",
         }), 202
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
 
 @api_bp.route("/runs/<run_id>/status", methods=["GET"])
 def get_run_status(run_id):
@@ -64,6 +93,18 @@ def get_run_logs(run_id):
         "latest_log_id": logs[-1]["id"] if logs else after_id,
         "summary_stats": run.get_summary_stats(),
     })
+
+@api_bp.route("/runs/<run_id>/logs/raw", methods=["GET"])
+def get_run_logs_raw(run_id):
+    from flask import Response
+    run = db.get_or_404(TestRun, run_id)
+    wm = get_wm()
+    raw = wm.read_run_log_file(run.project_id, run.id)
+    if not raw:
+        logs = RunLog.query.filter_by(run_id=run.id).order_by(RunLog.id.asc()).all()
+        raw = "\n".join([f"[{log.timestamp.strftime('%H:%M:%S') if log.timestamp else ''}] [{log.level}] {log.message}" for log in logs])
+    return Response(raw or "No logs recorded for this run.", mimetype="text/plain")
+
 
 @api_bp.route("/runs/<run_id>/cancel", methods=["POST"])
 def cancel_run(run_id):
@@ -194,6 +235,27 @@ def bulk_mark_automation(project_id):
         "message": f"Updated {updated_count} scenarios to {status_to_set}."
     })
 
+@api_bp.route("/projects/<project_id>/scenarios/<scenario_id>", methods=["DELETE"])
+def delete_scenario(project_id, scenario_id):
+    project = db.get_or_404(Project, project_id)
+    active_plan = TestPlan.query.filter_by(project_id=project.id, status="active").first_or_404()
+    tc = TestCase.query.filter_by(id=scenario_id, test_plan_id=active_plan.id).first_or_404()
+
+    scenario_title = tc.title
+    db.session.delete(tc)
+    db.session.commit()
+
+    # Re-sync updated test plan to workspace files
+    wm = get_wm()
+    wm.save_test_plan(project.id, active_plan.to_dict())
+
+    return jsonify({
+        "success": True,
+        "scenario_id": scenario_id,
+        "message": f"Scenario '{scenario_title}' deleted successfully.",
+        "remaining_scenarios_count": len(active_plan.test_cases),
+    })
+
 
 @api_bp.route("/projects/<project_id>/files", methods=["GET"])
 def list_files(project_id):
@@ -230,3 +292,73 @@ def save_file_content(project_id):
         return jsonify({"success": True, "message": f"Saved {file_path}"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@api_bp.route("/projects/<project_id>/files", methods=["DELETE"])
+def delete_file(project_id):
+    project = db.get_or_404(Project, project_id)
+    file_path = request.args.get("path") or (request.get_json(silent=True) or {}).get("path")
+    if not file_path:
+        return jsonify({"error": "path parameter is required"}), 400
+
+    safe_rel = file_path.lstrip("/").replace("../", "")
+    if not safe_rel.startswith("tests/"):
+        return jsonify({"error": "Can only delete files within tests/ directory"}), 400
+
+    wm = get_wm()
+    try:
+        deleted = wm.delete_test_file(project.id, safe_rel)
+        if not deleted:
+            return jsonify({"error": f"File '{file_path}' not found."}), 404
+
+        # Clean up any TestCase pointing to this script
+        active_plan = TestPlan.query.filter_by(project_id=project.id, status="active").first()
+        if active_plan:
+            linked_cases = TestCase.query.filter_by(test_plan_id=active_plan.id, script_path=safe_rel).all()
+            for tc in linked_cases:
+                tc.script_path = None
+                if tc.status == "automated":
+                    tc.status = "marked_for_automation"
+            if linked_cases:
+                db.session.commit()
+                wm.save_test_plan(project.id, active_plan.to_dict())
+
+        return jsonify({"success": True, "message": f"Successfully deleted '{safe_rel}'."})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@api_bp.route("/runs/<run_id>/report", methods=["GET"])
+def get_run_report(run_id):
+    run = db.get_or_404(TestRun, run_id)
+    wm = get_wm()
+    run_dir = wm.get_run_dir(run.project_id, run.id)
+    json_path = run_dir / "results.json"
+    if json_path.exists():
+        with open(json_path, "r", encoding="utf-8") as f:
+            return jsonify(json.load(f))
+    return jsonify({
+        "run_id": run.id,
+        "summary": run.get_summary_stats(),
+        "status": run.status,
+        "message": "Detailed report not yet compiled for this run."
+    })
+
+@api_bp.route("/runs/<run_id>/report/html", methods=["GET"])
+def get_run_report_html(run_id):
+    from flask import Response
+    run = db.get_or_404(TestRun, run_id)
+    wm = get_wm()
+    run_dir = wm.get_run_dir(run.project_id, run.id)
+    html_path = run_dir / "report.html"
+    if html_path.exists():
+        with open(html_path, "r", encoding="utf-8") as f:
+            return Response(f.read(), mimetype="text/html")
+    
+    # Generate on the fly if needed
+    from app.core.report_generator import generate_html_report
+    results = {
+        "summary": run.get_summary_stats(),
+        "tests": [],
+    }
+    html = generate_html_report(results, project_name="Project", run_id=run.id)
+    return Response(html, mimetype="text/html")
+

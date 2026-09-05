@@ -165,3 +165,81 @@ def test_full_exploration_and_test_execution_flow(client, app):
 
     assert test_completed is True, "Test execution run did not complete in time"
 
+
+def test_delete_scenario_and_delete_test_file(client, app):
+    # 1. Setup project, plan, test cases, and file
+    with app.app_context():
+        project = Project(name="Delete Test Project", target_url="http://localhost:5000", auth_type="none")
+        db.session.add(project)
+        db.session.commit()
+        project_id = project.id
+
+        plan = TestPlan(project_id=project_id, version=1, status="active", summary="Delete Test Plan")
+        db.session.add(plan)
+        db.session.flush()
+
+        tc1 = TestCase(
+            test_plan_id=plan.id,
+            title="Keep Scenario",
+            category="happy_path",
+            status="automated",
+            script_path="tests/test_demo.spec.py",
+        )
+        tc2 = TestCase(
+            test_plan_id=plan.id,
+            title="Delete Scenario",
+            category="edge_case",
+            status="pending_review",
+        )
+        db.session.add_all([tc1, tc2])
+        db.session.commit()
+        tc1_id = tc1.id
+        tc2_id = tc2.id
+        plan_dict = plan.to_dict()
+
+    # Create test file on disk
+    from app.core.workspace import WorkspaceManager
+    wm = WorkspaceManager(Path(app.config["WORKSPACES_ROOT"]))
+    wm.save_test_file(project_id, "tests/test_demo.spec.py", "def test_demo(): pass")
+    wm.save_test_plan(project_id, plan_dict)
+
+    # 2. Delete scenario tc2 via API
+    res_del_sc = client.delete(f"/api/projects/{project_id}/scenarios/{tc2_id}")
+    assert res_del_sc.status_code == 200
+    data_sc = res_del_sc.get_json()
+    assert data_sc["success"] is True
+    assert data_sc["remaining_scenarios_count"] == 1
+
+    with app.app_context():
+        assert db.session.get(TestCase, tc2_id) is None
+        assert db.session.get(TestCase, tc1_id) is not None
+
+    # Check updated test_plan.json on disk
+    disk_plan = wm.load_test_plan_json(project_id)
+    assert len(disk_plan["scenarios"]) == 1
+    assert disk_plan["scenarios"][0]["title"] == "Keep Scenario"
+
+    # 3. Test invalid file deletion attempts (security checks)
+    res_traversal = client.delete(f"/api/projects/{project_id}/files?path=../config.json")
+    assert res_traversal.status_code == 400
+
+    res_missing = client.delete(f"/api/projects/{project_id}/files?path=tests/non_existent.py")
+    assert res_missing.status_code == 404
+
+    # 4. Valid test file deletion
+    res_del_file = client.delete(f"/api/projects/{project_id}/files?path=tests/test_demo.spec.py")
+    assert res_del_file.status_code == 200
+    data_file = res_del_file.get_json()
+    assert data_file["success"] is True
+
+    # Verify file is deleted on disk
+    file_path = Path(app.config["WORKSPACES_ROOT"]) / project_id / "tests" / "test_demo.spec.py"
+    assert not file_path.exists()
+
+    # Verify linked TestCase is updated
+    with app.app_context():
+        updated_tc1 = db.session.get(TestCase, tc1_id)
+        assert updated_tc1.script_path is None
+        assert updated_tc1.status == "marked_for_automation"
+
+

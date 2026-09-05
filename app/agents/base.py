@@ -84,3 +84,62 @@ class BaseExplorerAgent(ABC):
         :return: ExplorerResult
         """
         pass
+
+@dataclass
+class GeneratorConfig:
+    project_id: str
+    target_url: str
+    auth_type: str
+    credentials: Dict[str, Any]
+    workspace_dir: str
+    run_id: str
+    scenarios: List[Dict[str, Any]] = field(default_factory=list)
+    scope_instructions: Optional[str] = None
+    prd_text: Optional[str] = None
+
+@dataclass
+class GeneratedTestFile:
+    filename: str
+    relative_path: str
+    content: str
+    scenario_ids: List[str] = field(default_factory=list)
+    test_count: int = 1
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "filename": self.filename,
+            "relative_path": self.relative_path,
+            "scenario_ids": self.scenario_ids,
+            "test_count": self.test_count,
+        }
+
+@dataclass
+class GeneratorResult:
+    status: str  # "success" | "failed" | "cancelled"
+    generated_files: List[GeneratedTestFile] = field(default_factory=list)
+    automated_scenario_ids: List[str] = field(default_factory=list)
+    artifacts_created: List[str] = field(default_factory=list)
+    error_message: Optional[str] = None
+
+class BaseGeneratorAgent(ABC):
+    """
+    Contract for Test Creation (Generator) Sub-Agents.
+    Converts reviewed & marked test plan scenarios into executable Playwright tests.
+    """
+
+    @abstractmethod
+    def generate(
+        self,
+        config: GeneratorConfig,
+        log_callback: Callable[[str, str, Optional[Dict[str, Any]]], None],
+        cancel_check: Optional[Callable[[], bool]] = None,
+    ) -> GeneratorResult:
+        """
+        Synthesizes executable tests for marked scenarios.
+        :param config: GeneratorConfig instance
+        :param log_callback: callable(level, message, metadata) to emit real-time logs
+        :param cancel_check: callable returning True if cancellation requested
+        :return: GeneratorResult
+        """
+        pass
+

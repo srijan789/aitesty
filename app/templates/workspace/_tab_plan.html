@@ -10,7 +10,7 @@
           Generated {{ plan.created_at.strftime('%b %d, %Y %H:%M UTC') }}
         </span>
         <span class="text-xs text-slate-400">&bull;</span>
-        <span class="text-xs font-medium text-slate-700">{{ plan.test_cases|length }} Total Scenarios</span>
+        <span id="total-scenarios-count" class="text-xs font-medium text-slate-700">{{ plan.test_cases|length }} Total Scenarios</span>
         <span class="text-xs text-slate-400">&bull;</span>
         <span id="marked-counter-badge" class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
           <i class="fa-solid fa-check mr-1"></i><span id="marked-count">{{ plan.test_cases|selectattr('status', 'equalto', 'marked_for_automation')|list|length }}</span> Marked for Automation
@@ -28,6 +28,11 @@
         <button type="button" onclick="bulkMarkForAutomation('{{ project.id }}')" class="px-3 py-1.5 rounded-lg font-medium text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition flex items-center">
           <i class="fa-solid fa-check-double mr-1.5"></i>Mark All
         </button>
+
+        <button type="button" onclick="triggerTestGeneration('{{ project.id }}')" id="btn-generate-tests" class="px-3 py-1.5 rounded-lg font-semibold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:opacity-95 shadow-sm transition flex items-center">
+          <i class="fa-solid fa-wand-magic-sparkles mr-1.5 text-amber-200"></i>Create Tests
+        </button>
+
 
         <button type="button" onclick="togglePlanView('cards')" id="btn-view-cards" class="px-3 py-1.5 rounded-lg font-medium bg-slate-100 text-slate-800 hover:bg-slate-200 transition">
           <i class="fa-solid fa-table-cells-large mr-1"></i>Cards
@@ -150,16 +155,24 @@
                 <!-- Footer / Action bar -->
                 <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
                   <span class="text-[11px] text-slate-400">Order #{{ loop.index }}</span>
-                  <button type="button" onclick="toggleAutomation('{{ project.id }}', '{{ tc.id }}', this)"
-                          class="toggle-automation-btn px-3 py-1 rounded-lg text-xs font-medium transition flex items-center space-x-1.5 {% if tc.status == 'marked_for_automation' %}bg-indigo-600 text-white hover:bg-indigo-700{% else %}bg-slate-100 text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 border border-slate-200{% endif %}">
-                    {% if tc.status == 'marked_for_automation' %}
-                      <i class="fa-solid fa-check text-[11px]"></i>
-                      <span>Marked for Automation</span>
-                    {% else %}
-                      <i class="fa-regular fa-square-check text-[11px]"></i>
-                      <span>Mark for Automation</span>
-                    {% endif %}
-                  </button>
+                  <div class="flex items-center space-x-2">
+                    <button type="button" onclick="deleteScenario('{{ project.id }}', '{{ tc.id }}', this)"
+                            title="Delete scenario"
+                            class="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition flex items-center space-x-1">
+                      <i class="fa-regular fa-trash-can text-[11px]"></i>
+                      <span>Delete</span>
+                    </button>
+                    <button type="button" onclick="toggleAutomation('{{ project.id }}', '{{ tc.id }}', this)"
+                            class="toggle-automation-btn px-3 py-1 rounded-lg text-xs font-medium transition flex items-center space-x-1.5 {% if tc.status == 'marked_for_automation' %}bg-indigo-600 text-white hover:bg-indigo-700{% else %}bg-slate-100 text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 border border-slate-200{% endif %}">
+                      {% if tc.status == 'marked_for_automation' %}
+                        <i class="fa-solid fa-check text-[11px]"></i>
+                        <span>Marked for Automation</span>
+                      {% else %}
+                        <i class="fa-regular fa-square-check text-[11px]"></i>
+                        <span>Mark for Automation</span>
+                      {% endif %}
+                    </button>
+                  </div>
                 </div>
               </div>
             {% endfor %}
@@ -269,16 +282,24 @@
 
                 <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
                   <span class="text-[11px] text-slate-400">Order #{{ loop.index }}</span>
-                  <button type="button" onclick="toggleAutomation('{{ project.id }}', '{{ tc.id }}', this)"
-                          class="toggle-automation-btn px-3 py-1 rounded-lg text-xs font-medium transition flex items-center space-x-1.5 {% if tc.status == 'marked_for_automation' %}bg-indigo-600 text-white hover:bg-indigo-700{% else %}bg-slate-100 text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 border border-slate-200{% endif %}">
-                    {% if tc.status == 'marked_for_automation' %}
-                      <i class="fa-solid fa-check text-[11px]"></i>
-                      <span>Marked for Automation</span>
-                    {% else %}
-                      <i class="fa-regular fa-square-check text-[11px]"></i>
-                      <span>Mark for Automation</span>
-                    {% endif %}
-                  </button>
+                  <div class="flex items-center space-x-2">
+                    <button type="button" onclick="deleteScenario('{{ project.id }}', '{{ tc.id }}', this)"
+                            title="Delete scenario"
+                            class="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition flex items-center space-x-1">
+                      <i class="fa-regular fa-trash-can text-[11px]"></i>
+                      <span>Delete</span>
+                    </button>
+                    <button type="button" onclick="toggleAutomation('{{ project.id }}', '{{ tc.id }}', this)"
+                            class="toggle-automation-btn px-3 py-1 rounded-lg text-xs font-medium transition flex items-center space-x-1.5 {% if tc.status == 'marked_for_automation' %}bg-indigo-600 text-white hover:bg-indigo-700{% else %}bg-slate-100 text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 border border-slate-200{% endif %}">
+                      {% if tc.status == 'marked_for_automation' %}
+                        <i class="fa-solid fa-check text-[11px]"></i>
+                        <span>Marked for Automation</span>
+                      {% else %}
+                        <i class="fa-regular fa-square-check text-[11px]"></i>
+                        <span>Mark for Automation</span>
+                      {% endif %}
+                    </button>
+                  </div>
                 </div>
               </div>
             {% endfor %}
@@ -388,16 +409,24 @@
 
                 <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
                   <span class="text-[11px] text-slate-400">Order #{{ loop.index }}</span>
-                  <button type="button" onclick="toggleAutomation('{{ project.id }}', '{{ tc.id }}', this)"
-                          class="toggle-automation-btn px-3 py-1 rounded-lg text-xs font-medium transition flex items-center space-x-1.5 {% if tc.status == 'marked_for_automation' %}bg-indigo-600 text-white hover:bg-indigo-700{% else %}bg-slate-100 text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 border border-slate-200{% endif %}">
-                    {% if tc.status == 'marked_for_automation' %}
-                      <i class="fa-solid fa-check text-[11px]"></i>
-                      <span>Marked for Automation</span>
-                    {% else %}
-                      <i class="fa-regular fa-square-check text-[11px]"></i>
-                      <span>Mark for Automation</span>
-                    {% endif %}
-                  </button>
+                  <div class="flex items-center space-x-2">
+                    <button type="button" onclick="deleteScenario('{{ project.id }}', '{{ tc.id }}', this)"
+                            title="Delete scenario"
+                            class="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition flex items-center space-x-1">
+                      <i class="fa-regular fa-trash-can text-[11px]"></i>
+                      <span>Delete</span>
+                    </button>
+                    <button type="button" onclick="toggleAutomation('{{ project.id }}', '{{ tc.id }}', this)"
+                            class="toggle-automation-btn px-3 py-1 rounded-lg text-xs font-medium transition flex items-center space-x-1.5 {% if tc.status == 'marked_for_automation' %}bg-indigo-600 text-white hover:bg-indigo-700{% else %}bg-slate-100 text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 border border-slate-200{% endif %}">
+                      {% if tc.status == 'marked_for_automation' %}
+                        <i class="fa-solid fa-check text-[11px]"></i>
+                        <span>Marked for Automation</span>
+                      {% else %}
+                        <i class="fa-regular fa-square-check text-[11px]"></i>
+                        <span>Mark for Automation</span>
+                      {% endif %}
+                    </button>
+                  </div>
                 </div>
               </div>
             {% endfor %}

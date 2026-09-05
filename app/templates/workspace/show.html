@@ -42,10 +42,16 @@
         <i class="fa-solid fa-bolt mr-2 text-amber-300"></i>Run Explorer Agent
       </button>
 
+      <button type="button" onclick="triggerTestGeneration('{{ project.id }}')" id="btn-trigger-gen"
+        class="inline-flex items-center px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:opacity-95 shadow-md shadow-emerald-500/25 transition">
+        <i class="fa-solid fa-wand-magic-sparkles mr-2 text-amber-200"></i>Create Tests
+      </button>
+
       <button type="button" onclick="triggerTestExecution('{{ project.id }}')" id="btn-trigger-tests"
         class="inline-flex items-center px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-600/20 transition">
         <i class="fa-solid fa-play mr-2 text-xs"></i>Run Test Suite
       </button>
+
 
       <a href="{{ url_for('projects.edit_form', project_id=project.id) }}"
         class="inline-flex items-center px-3.5 py-2.5 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition">
@@ -182,11 +188,37 @@
     }
   }
 
-  async function triggerTestExecution(projectId) {
+  async function triggerTestGeneration(projectId, scenarioIds) {
+    const btn = document.getElementById('btn-trigger-gen');
+    if (btn) btn.disabled = true;
+    try {
+      const res = await fetch(`/api/projects/${projectId}/generate-tests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenario_ids: scenarioIds || null }),
+      });
+      const data = await res.json();
+      if (data.success && data.run_id) {
+        window.location.href = `/projects/${projectId}/runs/${data.run_id}`;
+      } else {
+        alert("Failed to trigger test creation: " + (data.error || "Unknown error"));
+        if (btn) btn.disabled = false;
+      }
+    } catch (err) {
+      alert("Request error: " + err.message);
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function triggerTestExecution(projectId, options = {}) {
     const btn = document.getElementById('btn-trigger-tests');
     if (btn) btn.disabled = true;
     try {
-      const res = await fetch(`/api/projects/${projectId}/execute-tests`, { method: 'POST' });
+      const res = await fetch(`/api/projects/${projectId}/execute-tests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(options),
+      });
       const data = await res.json();
       if (data.success && data.run_id) {
         window.location.href = `/projects/${projectId}/runs/${data.run_id}`;
@@ -199,6 +231,24 @@
       if (btn) btn.disabled = false;
     }
   }
+
+  async function runTestFile(projectId, filePath) {
+    if (!confirm(`Run test file ${filePath}?`)) return;
+    await triggerTestExecution(projectId, { target_file: filePath });
+  }
+
+  async function runActiveTestFile(projectId) {
+    const label = document.getElementById('active-file-label');
+    if (!label) return;
+    const filePath = label.textContent.trim();
+    if (!filePath) return;
+    await triggerTestExecution(projectId, { target_file: filePath });
+  }
+
+  async function runSingleScenario(projectId, scenarioId, title) {
+    await triggerTestExecution(projectId, { scenario_id: scenarioId });
+  }
+
 
   async function loadTestFile(projectId, filePath, clickedElem) {
     document.querySelectorAll('.test-file-item').forEach(el => {
@@ -244,8 +294,77 @@
         setTimeout(() => { status.textContent = ""; }, 2500);
       }
     } catch (e) {
-      if (status) status.textContent = "Save failed";
+      if (status) status.textContent = "Error saving";
     }
   }
+
+  async function deleteTestFile(projectId, filePath) {
+    if (!confirm(`Are you sure you want to delete test specification "${filePath}"?`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/projects/${projectId}/files?path=${encodeURIComponent(filePath)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (data.success) {
+        window.location.reload();
+      } else {
+        alert("Failed to delete test file: " + (data.error || "Unknown error"));
+      }
+    } catch (e) {
+      alert("Error deleting file: " + e.message);
+    }
+  }
+
+  async function deleteActiveTestFile(projectId) {
+    const label = document.getElementById('active-file-label');
+    if (!label) return;
+    const path = label.textContent.trim();
+    if (!path) return;
+    await deleteTestFile(projectId, path);
+  }
+
+  async function loadLatestRunLogs(projectId, runId) {
+    const consoleEl = document.getElementById('tab-tests-log-console');
+    const pill = document.getElementById('tab-test-status-pill');
+    if (!consoleEl) return;
+    const targetRunId = runId || "{% if runs and runs|length > 0 %}{{ runs[0].id }}{% endif %}";
+    if (!targetRunId) {
+      consoleEl.textContent = "No execution runs recorded yet.";
+      return;
+    }
+    consoleEl.textContent = `Loading logs for run ${targetRunId.substring(0, 8)}...`;
+    try {
+      const res = await fetch(`/api/runs/${targetRunId}/logs/raw`);
+      const text = await res.text();
+      consoleEl.textContent = text || "No log entries found.";
+      if (pill) pill.textContent = `Run ${targetRunId.substring(0, 8)}`;
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    } catch (e) {
+      consoleEl.textContent = "Error loading logs: " + e.message;
+    }
+  }
+
+  function toggleTestLogsDrawer() {
+    const consoleEl = document.getElementById('tab-tests-log-console');
+    const chevron = document.getElementById('btn-logs-chevron');
+    if (!consoleEl) return;
+    if (consoleEl.classList.contains('hidden')) {
+      consoleEl.classList.remove('hidden');
+      if (chevron) chevron.className = 'fa-solid fa-chevron-up';
+    } else {
+      consoleEl.classList.add('hidden');
+      if (chevron) chevron.className = 'fa-solid fa-chevron-down';
+    }
+  }
+
+  // Load latest run logs when page loads or tests tab opens
+  document.addEventListener('DOMContentLoaded', () => {
+    loadLatestRunLogs('{{ project.id }}');
+  });
 </script>
 {% endblock %}
+
