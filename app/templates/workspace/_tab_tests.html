@@ -1,0 +1,67 @@
+<div class="space-y-6">
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+      <div>
+        <h3 class="text-sm font-semibold text-slate-900 flex items-center">
+          <i class="fa-solid fa-code mr-2 text-indigo-500"></i>Playwright Test Repository
+        </h3>
+        <p class="text-xs text-slate-500 mt-0.5">Executable test specifications stored in <code class="font-mono bg-slate-100 px-1 py-0.5 rounded text-slate-800">workspaces/{{ project.id }}/tests/</code></p>
+      </div>
+
+      {% if test_files %}
+        <span class="text-xs font-medium text-slate-500">{{ test_files|length }} Script(s)</span>
+      {% endif %}
+    </div>
+
+    {% if test_files %}
+      <div class="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-100 min-h-[480px]">
+        <!-- File List (Left Pane) -->
+        <div class="p-4 space-y-2 bg-slate-50/50">
+          <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-2 mb-2">Spec Files</div>
+          {% for f in test_files %}
+            <button type="button" onclick="loadTestFile('{{ project.id }}', '{{ f.path }}', this)"
+              class="test-file-item w-full text-left p-2.5 rounded-lg text-xs font-mono flex items-center justify-between hover:bg-indigo-50/60 hover:text-indigo-700 transition {% if loop.first %}bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200 active-file{% else %}text-slate-700{% endif %}"
+              data-filepath="{{ f.path }}">
+              <div class="flex items-center space-x-2 truncate">
+                <i class="fa-brands fa-python text-indigo-500"></i>
+                <span class="truncate">{{ f.name }}</span>
+              </div>
+              <span class="text-[10px] text-slate-400 shrink-0">{{ (f.size_bytes / 1024)|round(1) }} KB</span>
+            </button>
+          {% endfor %}
+        </div>
+
+        <!-- Code Editor / Viewer (Right Pane) -->
+        <div class="md:col-span-2 flex flex-col justify-between bg-slate-900 text-slate-100">
+          <div class="px-4 py-2 bg-slate-950 border-b border-slate-800 flex items-center justify-between text-xs">
+            <span id="active-file-label" class="font-mono text-slate-300">{{ test_files[0].path }}</span>
+            <div class="flex items-center space-x-2">
+              <span id="save-status-indicator" class="text-[11px] text-slate-400"></span>
+              <button type="button" onclick="saveActiveTestFile('{{ project.id }}')" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-medium transition flex items-center space-x-1">
+                <i class="fa-solid fa-floppy-disk text-[10px]"></i>
+                <span>Save</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="flex-1 p-4 font-mono text-xs overflow-auto">
+            <textarea id="test-code-editor" class="w-full h-full min-h-[400px] bg-transparent text-slate-100 focus:outline-none resize-none font-mono text-xs leading-relaxed" spellcheck="false"></textarea>
+          </div>
+        </div>
+      </div>
+    {% else %}
+      <div class="p-12 text-center">
+        <div class="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 text-xl mx-auto mb-3">
+          <i class="fa-solid fa-file-code"></i>
+        </div>
+        <h4 class="text-sm font-bold text-slate-800">No test scripts generated yet</h4>
+        <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+          When the Explorer Agent runs, it automatically translates high-confidence scenarios into standalone Playwright test scripts inside this repository.
+        </p>
+        <button type="button" onclick="triggerExploration('{{ project.id }}')" class="mt-4 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 transition">
+          <i class="fa-solid fa-bolt mr-1.5"></i>Trigger Explorer Agent
+        </button>
+      </div>
+    {% endif %}
+  </div>
+</div>

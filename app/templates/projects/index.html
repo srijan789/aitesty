@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}Projects - Aitesty Test Orchestrator{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-5 border-b border-slate-200">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Project Workspaces</h1>
+      <p class="text-sm text-slate-500 mt-1">Manage target applications, autonomous exploration agents, and test repositories.</p>
+    </div>
+    <div class="mt-4 sm:mt-0">
+      <a href="{{ url_for('projects.create_form') }}" class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-600/20 transition">
+        <i class="fa-solid fa-plus mr-2 text-xs"></i>Create Project
+      </a>
+    </div>
+  </div>
+
+  {% if projects %}
+    <!-- Projects Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {% for project in projects %}
+        {% set plan = project.latest_plan %}
+        {% set run = project.latest_run %}
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition flex flex-col justify-between overflow-hidden group">
+          <div class="p-6">
+            <!-- Header & Badges -->
+            <div class="flex items-start justify-between">
+              <div class="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-lg">
+                {{ project.name[:2].upper() }}
+              </div>
+              <div class="flex items-center space-x-1.5">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                  {% if project.auth_type == 'none' %}bg-slate-100 text-slate-700
+                  {% else %}bg-purple-100 text-purple-700{% endif %}">
+                  <i class="fa-solid fa-shield-halved mr-1 text-[10px]"></i>
+                  {{ project.auth_type|capitalize }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Title & URL -->
+            <div class="mt-4">
+              <h2 class="text-lg font-bold text-slate-900 group-hover:text-indigo-600 transition">
+                <a href="{{ url_for('workspace_views.show', project_id=project.id) }}">
+                  {{ project.name }}
+                </a>
+              </h2>
+              <div class="mt-1 flex items-center text-xs text-slate-500">
+                <i class="fa-solid fa-arrow-up-right-from-square mr-1.5 text-slate-400"></i>
+                <a href="{{ project.target_url }}" target="_blank" rel="noopener noreferrer" class="hover:underline truncate max-w-[220px]">
+                  {{ project.target_url }}
+                </a>
+              </div>
+              {% if project.description %}
+                <p class="text-xs text-slate-600 mt-2.5 line-clamp-2">{{ project.description }}</p>
+              {% endif %}
+            </div>
+
+            <!-- Stats & Status -->
+            <div class="mt-5 pt-4 border-t border-slate-100 grid grid-cols-2 gap-3 text-xs">
+              <div class="bg-slate-50 rounded-lg p-2.5">
+                <span class="text-slate-400 block mb-0.5">Test Plan</span>
+                {% if plan %}
+                  <span class="font-semibold text-emerald-600 flex items-center">
+                    <i class="fa-solid fa-list-check mr-1"></i>v{{ plan.version }} ({{ plan.test_cases|length }} cases)
+                  </span>
+                {% else %}
+                  <span class="text-slate-400 italic">Not explored yet</span>
+                {% endif %}
+              </div>
+              <div class="bg-slate-50 rounded-lg p-2.5">
+                <span class="text-slate-400 block mb-0.5">Last Run</span>
+                {% if run %}
+                  <span class="font-semibold 
+                    {% if run.status == 'completed' %}text-emerald-600
+                    {% elif run.status == 'running' %}text-indigo-600
+                    {% elif run.status == 'failed' %}text-rose-600
+                    {% else %}text-slate-600{% endif %} flex items-center">
+                    {% if run.status == 'running' %}<i class="fa-solid fa-spinner fa-spin mr-1"></i>{% endif %}
+                    {{ run.status|capitalize }}
+                  </span>
+                {% else %}
+                  <span class="text-slate-400 italic">None</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+
+          <!-- Card Actions -->
+          <div class="bg-slate-50/75 px-6 py-3 border-t border-slate-100 flex items-center justify-between text-xs">
+            <a href="{{ url_for('workspace_views.show', project_id=project.id) }}" class="font-medium text-indigo-600 hover:text-indigo-700 flex items-center">
+              Open Workspace <i class="fa-solid fa-chevron-right ml-1 text-[10px]"></i>
+            </a>
+            <div class="flex items-center space-x-3">
+              <a href="{{ url_for('projects.edit_form', project_id=project.id) }}" class="text-slate-400 hover:text-slate-600" title="Settings">
+                <i class="fa-solid fa-gear"></i>
+              </a>
+              <form action="{{ url_for('projects.delete', project_id=project.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this project and its workspace?');" class="inline">
+                <button type="submit" class="text-slate-400 hover:text-rose-600" title="Delete">
+                  <i class="fa-solid fa-trash-can"></i>
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <!-- Empty State -->
+    <div class="bg-white rounded-2xl border-2 border-dashed border-slate-200 p-12 text-center max-w-lg mx-auto my-12">
+      <div class="w-16 h-16 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 text-2xl mx-auto shadow-inner">
+        <i class="fa-solid fa-cubes-stacked"></i>
+      </div>
+      <h3 class="mt-4 text-lg font-bold text-slate-900">No project workspaces yet</h3>
+      <p class="mt-2 text-sm text-slate-500 leading-relaxed">
+        Get started by creating your first target application project. Aitesty will set up an isolated workspace, crawl the application, and generate automated test suites.
+      </p>
+      <div class="mt-6">
+        <a href="{{ url_for('projects.create_form') }}" class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-600/20 transition">
+          <i class="fa-solid fa-plus mr-2 text-xs"></i>Add Your First Target Project
+        </a>
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

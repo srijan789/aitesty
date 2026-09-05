@@ -1,0 +1,32 @@
+/* Custom styles for Aitesty Platform */
+
+/* Terminal Custom Scrollbar */
+#terminal-output::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+#terminal-output::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+#terminal-output::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+#terminal-output::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Code Editor Textarea */
+#test-code-editor {
+  tab-size: 4;
+  outline: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+/* Transitions */
+.tab-btn {
+  transition: all 0.15s ease-in-out;
+}

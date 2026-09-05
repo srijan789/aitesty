@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} - Workspace | Aitesty{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Breadcrumb -->
+  <nav class="flex text-xs text-slate-500 space-x-2">
+    <a href="{{ url_for('projects.index') }}" class="hover:text-indigo-600">Projects</a>
+    <span>/</span>
+    <span class="text-slate-800 font-medium">{{ project.name }}</span>
+  </nav>
+
+  <!-- Project Header Banner -->
+  <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div class="space-y-2">
+      <div class="flex items-center space-x-3">
+        <h1 class="text-2xl font-black text-slate-900 tracking-tight">{{ project.name }}</h1>
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold
+          {% if project.auth_type == 'none' %}bg-slate-100 text-slate-700
+          {% else %}bg-purple-100 text-purple-700 border border-purple-200{% endif %}">
+          <i class="fa-solid fa-shield-halved mr-1 text-[10px]"></i>{{ project.auth_type|capitalize }} Auth
+        </span>
+      </div>
+
+      <div class="flex items-center space-x-4 text-xs text-slate-500">
+        <a href="{{ project.target_url }}" target="_blank" rel="noopener noreferrer" class="hover:text-indigo-600 flex items-center">
+          <i class="fa-solid fa-arrow-up-right-from-square mr-1.5 text-slate-400"></i>{{ project.target_url }}
+        </a>
+        <span>&bull;</span>
+        <span>ID: <code class="font-mono bg-slate-100 px-1 py-0.5 rounded text-slate-700">{{ project.id[:8] }}</code></span>
+      </div>
+      {% if project.description %}
+        <p class="text-xs text-slate-600 max-w-2xl pt-1">{{ project.description }}</p>
+      {% endif %}
+    </div>
+
+    <!-- Quick Action Launch Buttons -->
+    <div class="flex flex-wrap items-center gap-3">
+      <button type="button" onclick="triggerExploration('{{ project.id }}')" id="btn-trigger-explore"
+        class="inline-flex items-center px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:opacity-95 shadow-md shadow-indigo-500/25 transition">
+        <i class="fa-solid fa-bolt mr-2 text-amber-300"></i>Run Explorer Agent
+      </button>
+
+      <button type="button" onclick="triggerTestExecution('{{ project.id }}')" id="btn-trigger-tests"
+        class="inline-flex items-center px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-600/20 transition">
+        <i class="fa-solid fa-play mr-2 text-xs"></i>Run Test Suite
+      </button>
+
+      <a href="{{ url_for('projects.edit_form', project_id=project.id) }}"
+        class="inline-flex items-center px-3.5 py-2.5 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition">
+        <i class="fa-solid fa-gear text-slate-500 mr-1.5"></i>Settings
+      </a>
+    </div>
+  </div>
+
+  <!-- Tab Navigation Bar -->
+  <div class="border-b border-slate-200">
+    <nav class="-mb-px flex space-x-6 text-sm" aria-label="Tabs">
+      <button type="button" onclick="switchTab('overview')" id="tab-btn-overview"
+        class="tab-btn border-indigo-600 text-indigo-600 whitespace-nowrap py-3 px-1 border-b-2 font-semibold text-xs flex items-center">
+        <i class="fa-solid fa-circle-info mr-2"></i>Workspace Overview
+      </button>
+
+      <button type="button" onclick="switchTab('plan')" id="tab-btn-plan"
+        class="tab-btn border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-xs flex items-center">
+        <i class="fa-solid fa-list-check mr-2"></i>Discovered Test Plan
+        {% if plan and plan.test_cases %}
+          <span class="ml-2 bg-indigo-100 text-indigo-700 py-0.5 px-2 rounded-full text-[10px] font-bold">{{ plan.test_cases|length }}</span>
+        {% endif %}
+      </button>
+
+      <button type="button" onclick="switchTab('tests')" id="tab-btn-tests"
+        class="tab-btn border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-xs flex items-center">
+        <i class="fa-solid fa-code mr-2"></i>Test Repository
+        {% if test_files %}
+          <span class="ml-2 bg-slate-100 text-slate-600 py-0.5 px-2 rounded-full text-[10px] font-bold">{{ test_files|length }}</span>
+        {% endif %}
+      </button>
+
+      <button type="button" onclick="switchTab('runs')" id="tab-btn-runs"
+        class="tab-btn border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-xs flex items-center">
+        <i class="fa-solid fa-clock-rotate-left mr-2"></i>Run History
+        {% if runs %}
+          <span class="ml-2 bg-slate-100 text-slate-600 py-0.5 px-2 rounded-full text-[10px] font-bold">{{ runs|length }}</span>
+        {% endif %}
+      </button>
+    </nav>
+  </div>
+
+  <!-- Tab Contents -->
+  <div id="tab-content-overview" class="tab-pane block">
+    {% include "workspace/_tab_overview.html" %}
+  </div>
+
+  <div id="tab-content-plan" class="tab-pane hidden">
+    {% include "workspace/_tab_plan.html" %}
+  </div>
+
+  <div id="tab-content-tests" class="tab-pane hidden">
+    {% include "workspace/_tab_tests.html" %}
+  </div>
+
+  <div id="tab-content-runs" class="tab-pane hidden">
+    {% include "workspace/_tab_runs.html" %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/plan_editor.js') }}"></script>
+<script>
+  function switchTab(tabId) {
+    document.querySelectorAll('.tab-pane').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('.tab-btn').forEach(el => {
+      el.classList.remove('border-indigo-600', 'text-indigo-600', 'font-semibold');
+      el.classList.add('border-transparent', 'text-slate-500', 'font-medium');
+    });
+
+    const targetPane = document.getElementById(`tab-content-${tabId}`);
+    const targetBtn = document.getElementById(`tab-btn-${tabId}`);
+    if (targetPane && targetBtn) {
+      targetPane.classList.remove('hidden');
+      targetBtn.classList.remove('border-transparent', 'text-slate-500', 'font-medium');
+      targetBtn.classList.add('border-indigo-600', 'text-indigo-600', 'font-semibold');
+    }
+
+    if (tabId === 'tests') {
+      // Auto-load first file if available
+      const firstFileBtn = document.querySelector('.test-file-item');
+      if (firstFileBtn) {
+        firstFileBtn.click();
+      }
+    }
+  }
+
+  function toggleSecretVisibility(elemId) {
+    const el = document.getElementById(elemId);
+    if (!el) return;
+    const raw = el.getAttribute('data-raw');
+    if (el.textContent === '••••••••') {
+      el.textContent = raw;
+    } else {
+      el.textContent = '••••••••';
+    }
+  }
+
+  function togglePlanView(view) {
+    const cards = document.getElementById('plan-cards-view');
+    const md = document.getElementById('plan-md-view');
+    const btnCards = document.getElementById('btn-view-cards');
+    const btnMd = document.getElementById('btn-view-md');
+
+    if (view === 'markdown') {
+      cards.classList.add('hidden');
+      md.classList.remove('hidden');
+      btnMd.classList.add('bg-slate-100', 'text-slate-800');
+      btnCards.classList.remove('bg-slate-100', 'text-slate-800');
+    } else {
+      md.classList.add('hidden');
+      cards.classList.remove('hidden');
+      btnCards.classList.add('bg-slate-100', 'text-slate-800');
+      btnMd.classList.remove('bg-slate-100', 'text-slate-800');
+    }
+  }
+
+  async function triggerExploration(projectId) {
+    const btn = document.getElementById('btn-trigger-explore');
+    if (btn) btn.disabled = true;
+    try {
+      const res = await fetch(`/api/projects/${projectId}/explore`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success && data.run_id) {
+        window.location.href = `/projects/${projectId}/runs/${data.run_id}`;
+      } else {
+        alert("Failed to trigger exploration: " + (data.error || "Unknown error"));
+        if (btn) btn.disabled = false;
+      }
+    } catch (err) {
+      alert("Request error: " + err.message);
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function triggerTestExecution(projectId) {
+    const btn = document.getElementById('btn-trigger-tests');
+    if (btn) btn.disabled = true;
+    try {
+      const res = await fetch(`/api/projects/${projectId}/execute-tests`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success && data.run_id) {
+        window.location.href = `/projects/${projectId}/runs/${data.run_id}`;
+      } else {
+        alert("Failed to trigger test run: " + (data.error || "Unknown error"));
+        if (btn) btn.disabled = false;
+      }
+    } catch (err) {
+      alert("Request error: " + err.message);
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function loadTestFile(projectId, filePath, clickedElem) {
+    document.querySelectorAll('.test-file-item').forEach(el => {
+      el.classList.remove('bg-indigo-50', 'text-indigo-700', 'font-semibold', 'border', 'border-indigo-200');
+      el.classList.add('text-slate-700');
+    });
+    if (clickedElem) {
+      clickedElem.classList.add('bg-indigo-50', 'text-indigo-700', 'font-semibold', 'border', 'border-indigo-200');
+    }
+
+    const label = document.getElementById('active-file-label');
+    const editor = document.getElementById('test-code-editor');
+    if (label) label.textContent = filePath;
+
+    try {
+      const res = await fetch(`/api/projects/${projectId}/files/content?path=${encodeURIComponent(filePath)}`);
+      const data = await res.json();
+      if (editor) editor.value = data.content || '';
+    } catch (e) {
+      if (editor) editor.value = '// Error loading file: ' + e.message;
+    }
+  }
+
+  async function saveActiveTestFile(projectId) {
+    const label = document.getElementById('active-file-label');
+    const editor = document.getElementById('test-code-editor');
+    const status = document.getElementById('save-status-indicator');
+    if (!label || !editor) return;
+
+    const path = label.textContent.trim();
+    const content = editor.value;
+    if (status) status.textContent = "Saving...";
+
+    try {
+      const res = await fetch(`/api/projects/${projectId}/files/content`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path, content }),
+      });
+      const data = await res.json();
+      if (status) {
+        status.textContent = data.success ? "Saved!" : "Error saving";
+        setTimeout(() => { status.textContent = ""; }, 2500);
+      }
+    } catch (e) {
+      if (status) status.textContent = "Save failed";
+    }
+  }
+</script>
+{% endblock %}

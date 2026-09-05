@@ -1,0 +1,11 @@
+{
+  "id": "36080630-92a9-4647-b773-bbd11db3e014",
+  "name": "test1",
+  "description": "",
+  "target_url": "http://10.20.17.66:5050",
+  "auth_type": "none",
+  "credentials": {},
+  "scope_instructions": "",
+  "created_at": "2026-09-05T05:28:25.468302",
+  "updated_at": "2026-09-05T05:28:25.471986"
+}
