@@ -30,6 +30,34 @@ def create_app(config_class=Config):
     with app.app_context():
         from app.models import Project, TestPlan, TestCase, TestRun, RunLog  # noqa: F401
         db.create_all()
+        # Backward-compatibility schema migration for existing SQLite files
+        try:
+            from sqlalchemy import text
+            with db.engine.connect() as conn:
+                try:
+                    conn.execute(text("ALTER TABLE projects ADD COLUMN prd_text TEXT"))
+                except Exception:
+                    pass
+                for col_sql in [
+                    "ALTER TABLE test_cases ADD COLUMN preconditions TEXT",
+                    "ALTER TABLE test_cases ADD COLUMN pass_fail_criteria TEXT",
+                    "ALTER TABLE test_cases ADD COLUMN priority VARCHAR(10) DEFAULT 'P1'",
+                    "ALTER TABLE test_cases ADD COLUMN healing_notes TEXT",
+                    "ALTER TABLE test_cases ADD COLUMN healing_status VARCHAR(50)",
+                    "ALTER TABLE run_logs ADD COLUMN test_name VARCHAR(150)",
+                    "ALTER TABLE run_logs ADD COLUMN scenario_id VARCHAR(50)",
+                    "ALTER TABLE projects ADD COLUMN crawl_depth INTEGER DEFAULT 2",
+                    "ALTER TABLE projects ADD COLUMN max_pages INTEGER DEFAULT 10",
+                    "ALTER TABLE projects ADD COLUMN target_test_count INTEGER DEFAULT 12",
+                    "ALTER TABLE projects ADD COLUMN exploration_strategy VARCHAR(50) DEFAULT 'balanced'",
+                ]:
+                    try:
+                        conn.execute(text(col_sql))
+                    except Exception:
+                        pass
+                conn.commit()
+        except Exception:
+            pass  # columns already exist or freshly created
 
     # Template filters/helpers
     @app.template_filter("timeago")

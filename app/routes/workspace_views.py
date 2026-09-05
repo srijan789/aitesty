@@ -69,10 +69,36 @@ def run_detail(project_id, run_id):
     
     wm = get_wm()
     raw_logs = wm.read_run_log_file(project.id, run.id)
+    test_log_files = wm.list_test_log_files(project.id, run.id)
+
+    import json
+    results_data = {}
+    json_path = wm.get_run_dir(project.id, run.id) / "results.json"
+    if json_path.exists():
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                results_data = json.load(f)
+        except Exception:
+            pass
+
+    healing_data = {}
+    heal_path = wm.get_run_dir(project.id, run.id) / "healing_report.json"
+    if heal_path.exists():
+        try:
+            with open(heal_path, "r", encoding="utf-8") as f:
+                healing_data = json.load(f)
+        except Exception:
+            pass
+
+    stats = run.get_summary_stats()
 
     return render_template(
         "workspace/run_detail.html",
         project=project,
         run=run,
+        stats=stats,
         raw_logs=raw_logs,
+        test_log_files=test_log_files,
+        results_data=results_data,
+        healing_data=healing_data,
     )

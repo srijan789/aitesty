@@ -32,6 +32,21 @@
       </div>
 
       <div class="bg-slate-50 p-3.5 rounded-lg border border-slate-100">
+        <dt class="text-slate-400 font-medium">Crawler Depth & Quota</dt>
+        <dd class="mt-1 font-semibold text-slate-900 flex items-center space-x-2">
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+            Depth: {{ project.crawl_depth or 2 }}
+          </span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+            Target: {{ project.target_test_count or 12 }} tests
+          </span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+            Max: {{ project.max_pages or 10 }} pages
+          </span>
+        </dd>
+      </div>
+
+      <div class="bg-slate-50 p-3.5 rounded-lg border border-slate-100">
         <dt class="text-slate-400 font-medium">Project Created</dt>
         <dd class="mt-1 text-slate-700 font-medium">
           {{ project.created_at.strftime('%b %d, %Y at %H:%M UTC') if project.created_at else 'Unknown' }}
@@ -92,6 +107,27 @@
       </div>
     {% else %}
       <p class="text-xs text-slate-400 italic">No custom instructions provided. The explorer agent will crawl all discoverable routes within the base domain.</p>
+    {% endif %}
+  </div>
+
+  <!-- Product Requirements Document (PRD) -->
+  <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-sm font-semibold text-slate-900 flex items-center">
+        <i class="fa-solid fa-file-contract mr-2 text-indigo-500"></i>Product Requirement Document (PRD)
+      </h3>
+      {% if project.prd_text %}
+        <span class="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+          <i class="fa-solid fa-check mr-1"></i>Active Spec
+        </span>
+      {% endif %}
+    </div>
+    {% if project.prd_text %}
+      <div class="p-4 bg-slate-900 text-slate-200 rounded-xl border border-slate-800 text-xs font-mono whitespace-pre-wrap max-h-64 overflow-y-auto leading-relaxed">
+{{ project.prd_text }}
+      </div>
+    {% else %}
+      <p class="text-xs text-slate-400 italic">No PRD document attached. The agent operates in autonomous URL route discovery mode. You can attach a PRD in <a href="{{ url_for('projects.edit_form', project_id=project.id) }}" class="text-indigo-600 hover:underline">Project Settings</a>.</p>
     {% endif %}
   </div>
 </div>

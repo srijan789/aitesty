@@ -13,6 +13,11 @@ class Project(db.Model):
     auth_type = db.Column(db.String(50), default="none")  # none, form, basic, bearer
     credentials_json = db.Column(db.Text, nullable=True)  # JSON-encoded credentials
     scope_instructions = db.Column(db.Text, nullable=True)
+    prd_text = db.Column(db.Text, nullable=True)  # Product Requirement Document / Specification
+    crawl_depth = db.Column(db.Integer, default=2, nullable=False)  # Depth of route link exploration (1-5)
+    max_pages = db.Column(db.Integer, default=10, nullable=False)  # Maximum unique routes to crawl
+    target_test_count = db.Column(db.Integer, default=12, nullable=False)  # Target test scenarios to generate
+    exploration_strategy = db.Column(db.String(50), default="balanced", nullable=False)  # balanced, deep_crawl, form_heavy, critical_paths
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -44,6 +49,7 @@ class Project(db.Model):
 
     @property
     def latest_plan(self):
+        from app.models.test_plan import TestPlan
         return (
             TestPlan.query.filter_by(project_id=self.id)
             .order_by(TestPlan.version.desc())
@@ -52,6 +58,7 @@ class Project(db.Model):
 
     @property
     def latest_run(self):
+        from app.models.test_run import TestRun
         return (
             TestRun.query.filter_by(project_id=self.id)
             .order_by(TestRun.started_at.desc())
@@ -67,6 +74,11 @@ class Project(db.Model):
             "auth_type": self.auth_type,
             "credentials": self.get_masked_credentials(),
             "scope_instructions": self.scope_instructions,
+            "prd_text": self.prd_text,
+            "crawl_depth": self.crawl_depth or 2,
+            "max_pages": self.max_pages or 10,
+            "target_test_count": self.target_test_count or 12,
+            "exploration_strategy": self.exploration_strategy or "balanced",
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

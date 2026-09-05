@@ -40,16 +40,22 @@ class TestPlan(db.Model):
 
 class TestCase(db.Model):
     __tablename__ = "test_cases"
+    __test__ = False
 
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     test_plan_id = db.Column(db.String(36), db.ForeignKey("test_plans.id", ondelete="CASCADE"), nullable=False)
     title = db.Column(db.String(200), nullable=False)
     category = db.Column(db.String(50), default="happy_path")  # happy_path, edge_case, error_flow
+    priority = db.Column(db.String(10), default="P1")          # P0, P1, P2, P3
+    preconditions = db.Column(db.Text, nullable=True)          # Starting application state
     description = db.Column(db.Text, nullable=True)
-    steps_json = db.Column(db.Text, nullable=True)  # JSON list of action steps
+    steps_json = db.Column(db.Text, nullable=True)             # JSON list of action steps
     expected_result = db.Column(db.Text, nullable=True)
-    script_path = db.Column(db.String(255), nullable=True)  # relative to workspace/tests/
-    status = db.Column(db.String(50), default="pending")    # pending, automated, manual
+    pass_fail_criteria = db.Column(db.Text, nullable=True)     # Explicit verification checklist
+    script_path = db.Column(db.String(255), nullable=True)     # set when automated script is generated
+    status = db.Column(db.String(50), default="pending_review")# pending_review, approved, marked_for_automation, automated, rejected
+    healing_notes = db.Column(db.Text, nullable=True)          # Diagnostic findings, failure attribution & advice for planner/generator
+    healing_status = db.Column(db.String(50), nullable=True)   # healthy, healed, app_defect, invalid_scenario, needs_script_fix
     execution_order = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -70,11 +76,16 @@ class TestCase(db.Model):
             "test_plan_id": self.test_plan_id,
             "title": self.title,
             "category": self.category,
+            "priority": self.priority,
+            "preconditions": self.preconditions,
             "description": self.description,
             "steps": self.get_steps(),
             "expected_result": self.expected_result,
+            "pass_fail_criteria": self.pass_fail_criteria,
             "script_path": self.script_path,
             "status": self.status,
+            "healing_notes": self.healing_notes,
+            "healing_status": self.healing_status,
             "execution_order": self.execution_order,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

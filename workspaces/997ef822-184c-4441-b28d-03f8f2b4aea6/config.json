@@ -1,0 +1,12 @@
+{
+  "id": "997ef822-184c-4441-b28d-03f8f2b4aea6",
+  "name": "aitesty",
+  "description": "",
+  "target_url": "http://127.0.0.1:5050",
+  "auth_type": "none",
+  "credentials": {},
+  "scope_instructions": "",
+  "prd_text": "",
+  "created_at": "2026-09-05T08:14:49.324275",
+  "updated_at": "2026-09-05T08:14:49.327271"
+}

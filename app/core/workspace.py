@@ -55,6 +55,7 @@ class WorkspaceManager:
             "auth_type": project.auth_type,
             "credentials": project.get_credentials(),
             "scope_instructions": project.scope_instructions,
+            "prd_text": getattr(project, "prd_text", None),
             "created_at": project.created_at.isoformat() if project.created_at else datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat(),
         }
@@ -129,12 +130,16 @@ class WorkspaceManager:
             if cat_scenarios:
                 lines.append(f"### {cat_title}\n")
                 for s in cat_scenarios:
-                    lines.append(f"#### {s.get('title', 'Scenario')}")
+                    priority = s.get("priority", "P1")
+                    status = s.get("status", "pending_review")
+                    lines.append(f"#### [{priority}] {s.get('title', 'Scenario')} `({status})`")
                     if s.get("description"):
                         lines.append(f"{s['description']}\n")
+                    if s.get("preconditions"):
+                        lines.append(f"**Preconditions:** {s['preconditions']}\n")
                     steps = s.get("steps", [])
                     if steps:
-                        lines.append("**Steps:**")
+                        lines.append("**Execution Steps:**")
                         for idx, step in enumerate(steps, 1):
                             if isinstance(step, dict):
                                 action = step.get("action", "")
@@ -147,8 +152,10 @@ class WorkspaceManager:
                                 lines.append(f"{idx}. {step}")
                         lines.append("")
                     if s.get("expected_result"):
-                        lines.append(f"**Expected Result:** {s['expected_result']}\n")
-                lines.append("---")
+                        lines.append(f"**Expected Output:** {s['expected_result']}\n")
+                    if s.get("pass_fail_criteria"):
+                        lines.append(f"**Pass / Fail Criteria:** {s['pass_fail_criteria']}\n")
+                lines.append("---\n")
 
         return "\n".join(lines)
 
@@ -157,6 +164,7 @@ class WorkspaceManager:
         run_dir.mkdir(parents=True, exist_ok=True)
         (run_dir / "screenshots").mkdir(parents=True, exist_ok=True)
         (run_dir / "traces").mkdir(parents=True, exist_ok=True)
+        (run_dir / "test_logs").mkdir(parents=True, exist_ok=True)
         
         # Touch initial execution.log
         log_file = run_dir / "execution.log"
@@ -183,6 +191,51 @@ class WorkspaceManager:
         with open(log_file, "r", encoding="utf-8") as f:
             return f.read()
 
+    def append_test_log_file(self, project_id: str, run_id: str, test_name: str, level: str, message: str):
+        """Appends a log line to an isolated per-testcase log file."""
+        run_dir = self.get_run_dir(project_id, run_id)
+        test_logs_dir = run_dir / "test_logs"
+        test_logs_dir.mkdir(parents=True, exist_ok=True)
+        clean_name = "".join(c for c in test_name if c.isalnum() or c in ("-", "_")).strip() or "test"
+        log_file = test_logs_dir / f"{clean_name}.log"
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.utcnow().strftime('%H:%M:%S.%f')[:-3]}] [{level.upper()}] {message}\n")
+
+    def read_test_log_file(self, project_id: str, run_id: str, test_name: str) -> str:
+        """Reads isolated log lines for a specific testcase."""
+        run_dir = self.get_run_dir(project_id, run_id)
+        clean_name = "".join(c for c in test_name if c.isalnum() or c in ("-", "_")).strip() or "test"
+        log_file = run_dir / "test_logs" / f"{clean_name}.log"
+        if not log_file.exists():
+            return ""
+        with open(log_file, "r", encoding="utf-8") as f:
+            return f.read()
+
+    def list_test_log_files(self, project_id: str, run_id: str) -> List[str]:
+        """Lists test names that have isolated log files."""
+        run_dir = self.get_run_dir(project_id, run_id)
+        test_logs_dir = run_dir / "test_logs"
+        if not test_logs_dir.exists():
+            return []
+        return sorted([p.stem for p in test_logs_dir.glob("*.log")])
+
+    def save_run_results(self, project_id: str, run_id: str, results_data: Dict[str, Any]) -> Path:
+        """Saves execution results.json for a test run."""
+        run_dir = self.get_run_dir(project_id, run_id)
+        run_dir.mkdir(parents=True, exist_ok=True)
+        results_file = run_dir / "results.json"
+        with open(results_file, "w", encoding="utf-8") as f:
+            json.dump(results_data, f, indent=2)
+        return results_file
+
+    def load_run_results(self, project_id: str, run_id: str) -> Optional[Dict[str, Any]]:
+        """Loads execution results.json for a test run if it exists."""
+        results_file = self.get_run_dir(project_id, run_id) / "results.json"
+        if not results_file.exists():
+            return None
+        with open(results_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+
     def list_test_files(self, project_id: str) -> List[Dict[str, Any]]:
         tests_dir = self.get_project_dir(project_id) / "tests"
         if not tests_dir.exists():
@@ -190,11 +243,32 @@ class WorkspaceManager:
         files = []
         for p in tests_dir.glob("*.py"):
             stat = p.stat()
+            subtests = []
+            try:
+                import ast
+                content = p.read_text(encoding="utf-8")
+                tree = ast.parse(content)
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
+                        docstring = ast.get_docstring(node) or ""
+                        subtest_title = node.name.replace("test_", "").replace("_", " ").title()
+                        for line in docstring.split("\n"):
+                            clean_line = line.strip()
+                            if "Subtest:" in clean_line:
+                                subtest_title = clean_line.split("Subtest:")[-1].strip()
+                        subtests.append({
+                            "name": node.name,
+                            "title": subtest_title,
+                        })
+            except Exception:
+                pass
+
             files.append({
                 "name": p.name,
                 "path": f"tests/{p.name}",
                 "size_bytes": stat.st_size,
                 "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                "subtests": subtests,
             })
         for p in tests_dir.glob("*.ts"):
             stat = p.stat()
@@ -203,6 +277,7 @@ class WorkspaceManager:
                 "path": f"tests/{p.name}",
                 "size_bytes": stat.st_size,
                 "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                "subtests": [],
             })
         return sorted(files, key=lambda x: x["name"])
 
@@ -221,3 +296,14 @@ class WorkspaceManager:
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
         return file_path
+
+    def delete_test_file(self, project_id: str, relative_path: str) -> bool:
+        """Safely delete a test file within the project tests/ directory."""
+        safe_rel = relative_path.lstrip("/").replace("../", "")
+        if not safe_rel.startswith("tests/"):
+            raise ValueError("Can only delete files within tests/ directory")
+        file_path = self.get_project_dir(project_id) / safe_rel
+        if file_path.exists() and file_path.is_file():
+            file_path.unlink()
+            return True
+        return False

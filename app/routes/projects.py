@@ -28,6 +28,11 @@ def create():
     description = request.form.get("description", "").strip()
     auth_type = request.form.get("auth_type", "none").strip()
     scope_instructions = request.form.get("scope_instructions", "").strip()
+    prd_text = request.form.get("prd_text", "").strip()
+    crawl_depth = request.form.get("crawl_depth", type=int) or 2
+    max_pages = request.form.get("max_pages", type=int) or 10
+    target_test_count = request.form.get("target_test_count", type=int) or 12
+    exploration_strategy = request.form.get("exploration_strategy", "balanced").strip()
 
     if not name or not target_url:
         flash("Project Name and Target URL are required.", "error")
@@ -53,6 +58,11 @@ def create():
         description=description,
         auth_type=auth_type,
         scope_instructions=scope_instructions,
+        prd_text=prd_text,
+        crawl_depth=crawl_depth,
+        max_pages=max_pages,
+        target_test_count=target_test_count,
+        exploration_strategy=exploration_strategy,
     )
     project.set_credentials(creds)
 
@@ -80,6 +90,15 @@ def update(project_id):
     project.description = request.form.get("description", "").strip()
     project.auth_type = request.form.get("auth_type", "none").strip()
     project.scope_instructions = request.form.get("scope_instructions", "").strip()
+    project.prd_text = request.form.get("prd_text", "").strip()
+    if request.form.get("crawl_depth"):
+        project.crawl_depth = request.form.get("crawl_depth", type=int)
+    if request.form.get("max_pages"):
+        project.max_pages = request.form.get("max_pages", type=int)
+    if request.form.get("target_test_count"):
+        project.target_test_count = request.form.get("target_test_count", type=int)
+    if request.form.get("exploration_strategy"):
+        project.exploration_strategy = request.form.get("exploration_strategy", "").strip()
 
     creds = {}
     if project.auth_type in ["form", "basic"]:

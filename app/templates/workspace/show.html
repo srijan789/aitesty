@@ -35,22 +35,92 @@
       {% endif %}
     </div>
 
-    <!-- Quick Action Launch Buttons -->
-    <div class="flex flex-wrap items-center gap-3">
-      <button type="button" onclick="triggerExploration('{{ project.id }}')" id="btn-trigger-explore"
-        class="inline-flex items-center px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:opacity-95 shadow-md shadow-indigo-500/25 transition">
-        <i class="fa-solid fa-bolt mr-2 text-amber-300"></i>Run Explorer Agent
-      </button>
+    <!-- Quick Action Launch Buttons & Browser Visibility -->
+    <div class="flex flex-col items-start md:items-end gap-3">
+      <div class="flex flex-wrap items-center gap-3">
+        <button type="button" onclick="triggerExploration('{{ project.id }}')" id="btn-trigger-explore"
+          class="inline-flex items-center px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:opacity-95 shadow-md shadow-indigo-500/25 transition">
+          <i class="fa-solid fa-bolt mr-2 text-amber-300"></i>Run Explorer Agent
+        </button>
 
-      <button type="button" onclick="triggerTestExecution('{{ project.id }}')" id="btn-trigger-tests"
-        class="inline-flex items-center px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-600/20 transition">
-        <i class="fa-solid fa-play mr-2 text-xs"></i>Run Test Suite
-      </button>
+        <button type="button" onclick="triggerTestGeneration('{{ project.id }}')" id="btn-trigger-gen"
+          class="inline-flex items-center px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:opacity-95 shadow-md shadow-emerald-500/25 transition">
+          <i class="fa-solid fa-wand-magic-sparkles mr-2 text-amber-200"></i>Create Tests
+        </button>
 
-      <a href="{{ url_for('projects.edit_form', project_id=project.id) }}"
-        class="inline-flex items-center px-3.5 py-2.5 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition">
-        <i class="fa-solid fa-gear text-slate-500 mr-1.5"></i>Settings
-      </a>
+        <button type="button" onclick="triggerTestExecution('{{ project.id }}')" id="btn-trigger-tests"
+          class="inline-flex items-center px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-600/20 transition">
+          <i class="fa-solid fa-play mr-2 text-xs"></i>Run Test Suite
+        </button>
+
+        <a href="{{ url_for('projects.edit_form', project_id=project.id) }}"
+          class="inline-flex items-center px-3.5 py-2.5 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition">
+          <i class="fa-solid fa-gear text-slate-500 mr-1.5"></i>Settings
+        </a>
+      </div>
+
+      <!-- Live Browser Visibility & Crawler Depth Controls -->
+      <div class="flex flex-wrap items-center gap-3 bg-slate-50 border border-slate-200/90 px-3.5 py-1.5 rounded-xl text-xs text-slate-700 shadow-xs">
+        <!-- Crawler Depth & Target Controls -->
+        <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center">
+          <i class="fa-solid fa-sitemap text-purple-600 mr-1.5"></i>Crawler:
+        </span>
+        <div class="flex items-center space-x-1" title="How many link hops deep the crawler should explore">
+          <span class="text-[11px] font-medium text-slate-500">Depth:</span>
+          <select id="select-crawl-depth" onchange="persistCrawlerSettings()" class="text-[11px] font-semibold bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500">
+            <option value="1" {% if project.crawl_depth == 1 %}selected{% endif %}>1 (Landing)</option>
+            <option value="2" {% if (project.crawl_depth or 2) == 2 %}selected{% endif %}>2 (Standard)</option>
+            <option value="3" {% if project.crawl_depth == 3 %}selected{% endif %}>3 (Deep)</option>
+            <option value="4" {% if project.crawl_depth == 4 %}selected{% endif %}>4 (Exhaustive)</option>
+          </select>
+        </div>
+        <span class="text-slate-300">&bull;</span>
+        <div class="flex items-center space-x-1" title="Minimum test scenarios to synthesize across routes">
+          <span class="text-[11px] font-medium text-slate-500">Target Tests:</span>
+          <select id="select-target-tests" onchange="persistCrawlerSettings()" class="text-[11px] font-semibold bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500">
+            <option value="8" {% if project.target_test_count == 8 %}selected{% endif %}>8 tests</option>
+            <option value="12" {% if (project.target_test_count or 12) == 12 %}selected{% endif %}>12 tests</option>
+            <option value="16" {% if project.target_test_count == 16 %}selected{% endif %}>16 tests</option>
+            <option value="20" {% if project.target_test_count == 20 %}selected{% endif %}>20 tests</option>
+            <option value="25" {% if project.target_test_count == 25 %}selected{% endif %}>25 tests</option>
+          </select>
+        </div>
+        <span class="text-slate-300">&bull;</span>
+        <div class="flex items-center space-x-1" title="Maximum unique routes/pages to crawl">
+          <span class="text-[11px] font-medium text-slate-500">Max Pages:</span>
+          <select id="select-max-pages" onchange="persistCrawlerSettings()" class="text-[11px] font-semibold bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500">
+            <option value="5" {% if project.max_pages == 5 %}selected{% endif %}>5</option>
+            <option value="10" {% if (project.max_pages or 10) == 10 %}selected{% endif %}>10</option>
+            <option value="15" {% if project.max_pages == 15 %}selected{% endif %}>15</option>
+            <option value="20" {% if project.max_pages == 20 %}selected{% endif %}>20</option>
+          </select>
+        </div>
+        <span class="text-slate-300">&bull;</span>
+        <!-- Browser UI options -->
+        <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center">
+          <i class="fa-solid fa-display text-indigo-500 mr-1.5"></i>UI:
+        </span>
+        <label class="inline-flex items-center space-x-1.5 cursor-pointer select-none group" title="Launch visible Chromium browser window during exploration agent run">
+          <input type="checkbox" id="chk-headed-explore" onchange="persistBrowserSettings()" class="w-3.5 h-3.5 rounded text-indigo-600 border-slate-300 focus:ring-indigo-500 cursor-pointer">
+          <span class="text-xs group-hover:text-indigo-600 font-medium transition">Show Explorer</span>
+        </label>
+        <span class="text-slate-300">&bull;</span>
+        <label class="inline-flex items-center space-x-1.5 cursor-pointer select-none group" title="Launch visible Chromium browser window during test suite & subtest execution">
+          <input type="checkbox" id="chk-headed-tests" onchange="persistBrowserSettings()" class="w-3.5 h-3.5 rounded text-emerald-600 border-slate-300 focus:ring-emerald-500 cursor-pointer">
+          <span class="text-xs group-hover:text-emerald-600 font-medium transition">Show Test Runs</span>
+        </label>
+        <span class="text-slate-300">&bull;</span>
+        <div class="flex items-center space-x-1.5 text-slate-500" title="Delay between actions in milliseconds so you can follow along">
+          <i class="fa-solid fa-gauge-high text-[11px] text-amber-500"></i>
+          <span class="text-[11px] font-medium text-slate-500">Slow Mo:</span>
+          <select id="select-slow-mo" onchange="persistBrowserSettings()" class="text-[11px] font-semibold bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500">
+            <option value="250">250ms</option>
+            <option value="500" selected>500ms</option>
+            <option value="1000">1000ms</option>
+            <option value="1500">1500ms</option>
+          </select>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -164,11 +234,103 @@
     }
   }
 
+  function loadBrowserSettings() {
+    const chkExplore = document.getElementById('chk-headed-explore');
+    const chkTests = document.getElementById('chk-headed-tests');
+    const selectSlowMo = document.getElementById('select-slow-mo');
+
+    if (chkExplore) {
+      const savedExplore = localStorage.getItem('aitesty_headed_explore');
+      if (savedExplore !== null) chkExplore.checked = (savedExplore === 'true');
+    }
+    if (chkTests) {
+      const savedTests = localStorage.getItem('aitesty_headed_tests');
+      if (savedTests !== null) chkTests.checked = (savedTests === 'true');
+    }
+    if (selectSlowMo) {
+      const savedSlowMo = localStorage.getItem('aitesty_slow_mo');
+      if (savedSlowMo !== null) selectSlowMo.value = savedSlowMo;
+    }
+
+    const selDepth = document.getElementById('select-crawl-depth');
+    const selTarget = document.getElementById('select-target-tests');
+    const selMax = document.getElementById('select-max-pages');
+    if (selDepth) {
+      const savedDepth = localStorage.getItem('aitesty_crawl_depth');
+      if (savedDepth !== null) selDepth.value = savedDepth;
+    }
+    if (selTarget) {
+      const savedTarget = localStorage.getItem('aitesty_target_tests');
+      if (savedTarget !== null) selTarget.value = savedTarget;
+    }
+    if (selMax) {
+      const savedMax = localStorage.getItem('aitesty_max_pages');
+      if (savedMax !== null) selMax.value = savedMax;
+    }
+  }
+
+  function persistCrawlerSettings() {
+    const selDepth = document.getElementById('select-crawl-depth');
+    const selTarget = document.getElementById('select-target-tests');
+    const selMax = document.getElementById('select-max-pages');
+    if (selDepth) localStorage.setItem('aitesty_crawl_depth', selDepth.value);
+    if (selTarget) localStorage.setItem('aitesty_target_tests', selTarget.value);
+    if (selMax) localStorage.setItem('aitesty_max_pages', selMax.value);
+  }
+
+  function persistBrowserSettings() {
+    const chkExplore = document.getElementById('chk-headed-explore');
+    const chkTests = document.getElementById('chk-headed-tests');
+    const selectSlowMo = document.getElementById('select-slow-mo');
+
+    if (chkExplore) localStorage.setItem('aitesty_headed_explore', chkExplore.checked);
+    if (chkTests) localStorage.setItem('aitesty_headed_tests', chkTests.checked);
+    if (selectSlowMo) localStorage.setItem('aitesty_slow_mo', selectSlowMo.value);
+  }
+
+  function getBrowserExecutionOptions(type) {
+    const chkExplore = document.getElementById('chk-headed-explore');
+    const chkTests = document.getElementById('chk-headed-tests');
+    const selectSlowMo = document.getElementById('select-slow-mo');
+
+    const slowMoVal = selectSlowMo ? parseInt(selectSlowMo.value, 10) : 500;
+
+    if (type === 'explore') {
+      const isHeaded = chkExplore ? chkExplore.checked : (localStorage.getItem('aitesty_headed_explore') === 'true');
+      return {
+        headless: !isHeaded,
+        slow_mo: isHeaded ? slowMoVal : 0,
+      };
+    } else {
+      const isHeaded = chkTests ? chkTests.checked : (localStorage.getItem('aitesty_headed_tests') === 'true');
+      return {
+        headless: !isHeaded,
+        slow_mo: isHeaded ? slowMoVal : 0,
+      };
+    }
+  }
+
   async function triggerExploration(projectId) {
     const btn = document.getElementById('btn-trigger-explore');
     if (btn) btn.disabled = true;
     try {
-      const res = await fetch(`/api/projects/${projectId}/explore`, { method: 'POST' });
+      const browserOpts = getBrowserExecutionOptions('explore');
+      const selDepth = document.getElementById('select-crawl-depth');
+      const selTarget = document.getElementById('select-target-tests');
+      const selMax = document.getElementById('select-max-pages');
+
+      const payload = {
+        ...browserOpts,
+        crawl_depth: selDepth ? parseInt(selDepth.value, 10) : {{ project.crawl_depth or 2 }},
+        target_test_count: selTarget ? parseInt(selTarget.value, 10) : {{ project.target_test_count or 12 }},
+        max_pages: selMax ? parseInt(selMax.value, 10) : {{ project.max_pages or 10 }},
+      };
+
+      const res = await fetch(`/api/projects/${projectId}/explore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
       const data = await res.json();
       if (data.success && data.run_id) {
         window.location.href = `/projects/${projectId}/runs/${data.run_id}`;
@@ -182,11 +344,39 @@
     }
   }
 
-  async function triggerTestExecution(projectId) {
+  async function triggerTestGeneration(projectId, scenarioIds) {
+    const btn = document.getElementById('btn-trigger-gen');
+    if (btn) btn.disabled = true;
+    try {
+      const res = await fetch(`/api/projects/${projectId}/generate-tests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenario_ids: scenarioIds || null }),
+      });
+      const data = await res.json();
+      if (data.success && data.run_id) {
+        window.location.href = `/projects/${projectId}/runs/${data.run_id}`;
+      } else {
+        alert("Failed to trigger test creation: " + (data.error || "Unknown error"));
+        if (btn) btn.disabled = false;
+      }
+    } catch (err) {
+      alert("Request error: " + err.message);
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function triggerTestExecution(projectId, options = {}) {
     const btn = document.getElementById('btn-trigger-tests');
     if (btn) btn.disabled = true;
     try {
-      const res = await fetch(`/api/projects/${projectId}/execute-tests`, { method: 'POST' });
+      const browserOpts = getBrowserExecutionOptions('tests');
+      const payload = Object.assign({}, browserOpts, options);
+      const res = await fetch(`/api/projects/${projectId}/execute-tests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
       const data = await res.json();
       if (data.success && data.run_id) {
         window.location.href = `/projects/${projectId}/runs/${data.run_id}`;
@@ -200,7 +390,118 @@
     }
   }
 
-  async function loadTestFile(projectId, filePath, clickedElem) {
+  async function runTestFile(projectId, filePath) {
+    if (!confirm(`Run test file ${filePath}?`)) return;
+    await triggerTestExecution(projectId, { target_file: filePath });
+  }
+
+  async function runSingleSubtest(projectId, filePath, testName) {
+    if (!confirm(`Run subtest '${testName}' from ${filePath}?`)) return;
+    await triggerTestExecution(projectId, { target_file: filePath, target_tests: [testName] });
+  }
+
+  function getSelectedSpecFiles() {
+    const checked = document.querySelectorAll('.spec-file-chk:checked');
+    const paths = [];
+    checked.forEach(chk => {
+      const p = chk.getAttribute('data-filepath');
+      if (p) paths.push(p);
+    });
+    return paths;
+  }
+
+  function onSpecFileSelectChange() {
+    const selectedPaths = getSelectedSpecFiles();
+    const countRun = document.getElementById('selected-files-count-run');
+    const countDel = document.getElementById('selected-files-count-del');
+    const btnRun = document.getElementById('btn-run-selected-files');
+    const btnDel = document.getElementById('btn-delete-selected-files');
+    const label = document.getElementById('selected-spec-files-label');
+    const masterChk = document.getElementById('select-all-spec-files-chk');
+    const allCheckboxes = document.querySelectorAll('.spec-file-chk');
+
+    if (countRun) countRun.textContent = selectedPaths.length;
+    if (countDel) countDel.textContent = selectedPaths.length;
+
+    if (selectedPaths.length > 0) {
+      if (btnRun) btnRun.classList.remove('hidden');
+      if (btnDel) btnDel.classList.remove('hidden');
+      if (label) {
+        label.classList.remove('hidden');
+        label.textContent = `${selectedPaths.length} selected`;
+      }
+    } else {
+      if (btnRun) btnRun.classList.add('hidden');
+      if (btnDel) btnDel.classList.add('hidden');
+      if (label) label.classList.add('hidden');
+    }
+
+    if (masterChk && allCheckboxes.length > 0) {
+      masterChk.checked = selectedPaths.length === allCheckboxes.length;
+      masterChk.indeterminate = selectedPaths.length > 0 && selectedPaths.length < allCheckboxes.length;
+    }
+  }
+
+  function toggleSelectAllSpecFiles(masterCheckbox) {
+    const isChecked = masterCheckbox.checked;
+    document.querySelectorAll('.spec-file-chk').forEach(chk => {
+      chk.checked = isChecked;
+    });
+    onSpecFileSelectChange();
+  }
+
+  async function runSelectedTestFiles(projectId) {
+    const selectedPaths = getSelectedSpecFiles();
+    if (selectedPaths.length === 0) {
+      alert("Please select at least one test file to run.");
+      return;
+    }
+    if (!confirm(`Run ${selectedPaths.length} selected test specification(s)?`)) {
+      return;
+    }
+    await triggerTestExecution(projectId, { target_files: selectedPaths });
+  }
+
+  async function deleteSelectedTestFiles(projectId) {
+    const selectedPaths = getSelectedSpecFiles();
+    if (selectedPaths.length === 0) {
+      alert("Please select at least one test file to delete.");
+      return;
+    }
+    if (!confirm(`Are you sure you want to delete ${selectedPaths.length} test specification(s)?`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/projects/${projectId}/files/bulk-delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paths: selectedPaths }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        window.location.reload();
+      } else {
+        alert("Failed to delete files: " + (data.error || "Unknown error"));
+      }
+    } catch (e) {
+      alert("Error deleting files: " + e.message);
+    }
+  }
+
+  async function runActiveTestFile(projectId) {
+    const label = document.getElementById('active-file-label');
+    if (!label) return;
+    const filePath = label.textContent.trim();
+    if (!filePath) return;
+    await triggerTestExecution(projectId, { target_file: filePath });
+  }
+
+  async function runSingleScenario(projectId, scenarioId, title) {
+    await triggerTestExecution(projectId, { scenario_id: scenarioId });
+  }
+
+
+  async function loadTestFile(projectId, filePath, clickedElem, subtestCount) {
     document.querySelectorAll('.test-file-item').forEach(el => {
       el.classList.remove('bg-indigo-50', 'text-indigo-700', 'font-semibold', 'border', 'border-indigo-200');
       el.classList.add('text-slate-700');
@@ -212,6 +513,12 @@
     const label = document.getElementById('active-file-label');
     const editor = document.getElementById('test-code-editor');
     if (label) label.textContent = filePath;
+
+    const badgeText = document.getElementById('active-file-subtests-text');
+    const count = subtestCount !== undefined ? subtestCount : (clickedElem ? clickedElem.getAttribute('data-subtest-count') : null);
+    if (badgeText && count !== null) {
+      badgeText.textContent = `${count} subtest${count == 1 ? '' : 's'}`;
+    }
 
     try {
       const res = await fetch(`/api/projects/${projectId}/files/content?path=${encodeURIComponent(filePath)}`);
@@ -244,8 +551,78 @@
         setTimeout(() => { status.textContent = ""; }, 2500);
       }
     } catch (e) {
-      if (status) status.textContent = "Save failed";
+      if (status) status.textContent = "Error saving";
     }
   }
+
+  async function deleteTestFile(projectId, filePath) {
+    if (!confirm(`Are you sure you want to delete test specification "${filePath}"?`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/projects/${projectId}/files?path=${encodeURIComponent(filePath)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (data.success) {
+        window.location.reload();
+      } else {
+        alert("Failed to delete test file: " + (data.error || "Unknown error"));
+      }
+    } catch (e) {
+      alert("Error deleting file: " + e.message);
+    }
+  }
+
+  async function deleteActiveTestFile(projectId) {
+    const label = document.getElementById('active-file-label');
+    if (!label) return;
+    const path = label.textContent.trim();
+    if (!path) return;
+    await deleteTestFile(projectId, path);
+  }
+
+  async function loadLatestRunLogs(projectId, runId) {
+    const consoleEl = document.getElementById('tab-tests-log-console');
+    const pill = document.getElementById('tab-test-status-pill');
+    if (!consoleEl) return;
+    const targetRunId = runId || "{% if runs and runs|length > 0 %}{{ runs[0].id }}{% endif %}";
+    if (!targetRunId) {
+      consoleEl.textContent = "No execution runs recorded yet.";
+      return;
+    }
+    consoleEl.textContent = `Loading logs for run ${targetRunId.substring(0, 8)}...`;
+    try {
+      const res = await fetch(`/api/runs/${targetRunId}/logs/raw`);
+      const text = await res.text();
+      consoleEl.textContent = text || "No log entries found.";
+      if (pill) pill.textContent = `Run ${targetRunId.substring(0, 8)}`;
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    } catch (e) {
+      consoleEl.textContent = "Error loading logs: " + e.message;
+    }
+  }
+
+  function toggleTestLogsDrawer() {
+    const consoleEl = document.getElementById('tab-tests-log-console');
+    const chevron = document.getElementById('btn-logs-chevron');
+    if (!consoleEl) return;
+    if (consoleEl.classList.contains('hidden')) {
+      consoleEl.classList.remove('hidden');
+      if (chevron) chevron.className = 'fa-solid fa-chevron-up';
+    } else {
+      consoleEl.classList.add('hidden');
+      if (chevron) chevron.className = 'fa-solid fa-chevron-down';
+    }
+  }
+
+  // Load latest run logs and restored browser options when page loads
+  document.addEventListener('DOMContentLoaded', () => {
+    loadBrowserSettings();
+    loadLatestRunLogs('{{ project.id }}');
+  });
 </script>
 {% endblock %}
+

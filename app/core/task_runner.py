@@ -102,13 +102,29 @@ class TaskRunner:
             )
             db.session.add(err_log)
         finally:
-            run.completed_at = datetime.utcnow()
-            run.duration_ms = int((time.time() - start_time) * 1000)
-            db.session.commit()
+            try:
+                run.completed_at = datetime.utcnow()
+                run.duration_ms = int((time.time() - start_time) * 1000)
+                db.session.commit()
+            except Exception:
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
 
             with self._lock:
                 if run_id in self._active_tasks:
-                    self._active_tasks[run_id]["status"] = run.status
+                    self._active_tasks[run_id]["status"] = getattr(run, "status", "completed")
+
+    def wait_for_all_tasks(self, timeout: float = 5.0):
+        """Wait for all currently submitted futures to complete (useful in tests/shutdown)."""
+        with self._lock:
+            futures = [t["future"] for t in self._active_tasks.values() if t.get("future")]
+        for f in futures:
+            try:
+                f.result(timeout=timeout)
+            except Exception:
+                pass
 
     def cancel_task(self, run_id: str) -> bool:
         """Signals a task to cancel."""

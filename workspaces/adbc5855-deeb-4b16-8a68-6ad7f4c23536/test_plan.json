@@ -1,0 +1,432 @@
+{
+  "id": "6783e3f7-3220-4eec-8c46-cf030624df14",
+  "project_id": "adbc5855-deeb-4b16-8a68-6ad7f4c23536",
+  "version": 7,
+  "status": "active",
+  "summary": "Automated Test Plan for n8n demo (v7)",
+  "raw_markdown": "# Test Plan: Automated Test Plan for n8n demo (v7)\n\nVersion: 7 | Status: active\nGenerated: 2026-09-05 11:50:29 UTC\n\n## Discovered Scenarios\n\n### \u2705 Happy Path Scenarios\n\n#### [P0] Successful User Sign-In with Valid Credentials `(pending_review)`\nVerify that a user can successfully authenticate using valid email and password credentials.\n\n**Preconditions:** User is logged out on http://localhost:5678/signin.\n\n**Execution Steps:**\n1. Navigate on `http://localhost:5678/signin` -> Sign in page renders with email and password inputs.\n2. Fill on `#emailOrLdapLoginId` -> Email input contains srijan.psn@gmail.com.\n3. Fill on `#password` -> Password input contains Password1.\n4. Click on `button:has-text(\"Sign in\")` -> Authentication request succeeds and redirects to dashboard/assistant.\n\n**Expected Output:** User is authenticated and redirected to the application onboard/dashboard view.\n\n**Pass / Fail Criteria:** PASS if HTTP 200/redirect occurs and user lands on dashboard or assistant view. FAIL if error message displays or remains on sign-in page.\n\n#### [P1] Navigate to Forgot Password Flow `(pending_review)`\nVerify navigation to forgot password view and presence of recovery instructions/inputs.\n\n**Preconditions:** User is unauthenticated on /signin.\n\n**Execution Steps:**\n1. Navigate on `http://localhost:5678/signin` -> Sign-in page loads with forgot password link.\n2. Click on `a[href='/forgot-password']` -> Navigates to /forgot-password route.\n\n**Expected Output:** Forgot password route is reachable and displays recovery interface or redirection.\n\n**Pass / Fail Criteria:** PASS if forgot password view loads with 200 HTTP status and proper recovery controls. FAIL if 404 or uncaught exception.\n\n#### [P0] Create and Initialize New Workflow Canvas `(pending_review)`\nVerify initialization of a new workflow canvas from navigation.\n\n**Preconditions:** User is authenticated in n8n.\n\n**Execution Steps:**\n1. Navigate on `http://localhost:5678/workflow/new` -> Navigates to workflow creation endpoint.\n2. Assert on `button:has-text(\"Publish\")` -> Workflow editor is visible with Publish button and canvas.\n\n**Expected Output:** A new empty workflow is generated with canvas, editor controls, and unique workflow ID.\n\n**Pass / Fail Criteria:** PASS if /workflow/new initializes a workflow canvas with Editor/Executions tabs and Publish button. FAIL if canvas fails to render.\n\n#### [P1] Access Settings Configuration Dashboard `(pending_review)`\nVerify access to Settings overview and sub-navigation links.\n\n**Preconditions:** User is authenticated with administrative privileges.\n\n**Execution Steps:**\n1. Navigate on `http://localhost:5678/settings` -> Settings page loads successfully.\n2. Assert on `a[href='/settings/users']` -> Settings sub-links (Users, API, Usage) are visible.\n\n**Expected Output:** Settings dashboard renders with navigation tabs for Personal, Users, API, SSO, and Security.\n\n**Pass / Fail Criteria:** PASS if settings dashboard and sidebar options render correctly. FAIL if settings route throws 500 or blank screen.\n\n#### [P2] AI Assistant Onboarding and Dismissal `(pending_review)`\nVerify AI Assistant onboarding view and options to setup or postpone.\n\n**Preconditions:** User is authenticated on /assistant.\n\n**Execution Steps:**\n1. Navigate on `http://localhost:5678/assistant` -> AI Assistant onboarding screen appears.\n2. Click on `button:has-text(\"Set up later in Settings\")` -> Redirects to main workflows view.\n\n**Expected Output:** AI Assistant banner displays option to 'Get started' or 'Set up later in Settings'.\n\n**Pass / Fail Criteria:** PASS if clicking 'Set up later in Settings' dismisses the prompt and redirects to /home/workflows. FAIL if dialog cannot be dismissed.\n\n#### [P1] Workflow View Tab Switching (Editor vs Executions) `(pending_review)`\nVerify navigation between Workflow canvas tabs (Editor, Executions, Evaluations).\n\n**Preconditions:** User is on a workflow view (/workflow/new).\n\n**Execution Steps:**\n1. Navigate on `http://localhost:5678/workflow/new` -> Workflow canvas is displayed with tab bar.\n2. Click on `button:has-text(\"Executions\")` -> Executions log view is displayed.\n3. Click on `button:has-text(\"Editor\")` -> Editor canvas view is restored.\n\n**Expected Output:** User can switch seamlessly between Editor and Executions sub-views.\n\n**Pass / Fail Criteria:** PASS if tab clicks change active view state without page reloads or errors. FAIL if switching tabs results in UI lockup.\n\n---\n\n### \u26a0\ufe0f Edge Cases & Boundary Conditions\n\n#### [P1] Empty Form Submission Validation on Sign-In `(pending_review)`\nVerify client/server validation behavior when submitting empty credentials on the sign-in form.\n\n**Preconditions:** User is on /signin page.\n\n**Execution Steps:**\n1. Navigate on `http://localhost:5678/signin` -> Sign in inputs are empty.\n2. Click on `button:has-text(\"Sign in\")` -> Validation triggers indicating fields are required.\n\n**Expected Output:** Form validation prevents submission or highlights missing required fields without unhandled exceptions.\n\n**Pass / Fail Criteria:** PASS if required field validation triggers and no login request is dispatched. FAIL if 500 error occurs.\n\n#### [P1] Special Character and Injection Resilience in Login Identifier `(pending_review)`\nVerify application resilience when entering special characters and SQL/XSS payloads into the login identifier.\n\n**Preconditions:** User is on /signin page.\n\n**Execution Steps:**\n1. Navigate on `http://localhost:5678/signin` -> Sign-in page loads.\n2. Fill on `#emailOrLdapLoginId` -> Special characters and quotes accepted into input safely.\n3. Fill on `#password` -> Password filled.\n4. Click on `button:has-text(\"Sign in\")` -> Clean rejection response without script execution.\n\n**Expected Output:** Input is safely sanitized or validated without executing scripts or causing 500 server errors.\n\n**Pass / Fail Criteria:** PASS if input is rejected safely with invalid credential notification and no script executes. FAIL if XSS executes or 500 internal server error is returned.\n\n#### [P2] Input Boundary and Overflow Handling on Sign-In Inputs `(pending_review)`\nVerify sign-in input boundary testing with maximum length strings (>256 characters).\n\n**Preconditions:** User is on /signin page.\n\n**Execution Steps:**\n1. Navigate on `http://localhost:5678/signin` -> Sign in page loads.\n2. Fill on `#emailOrLdapLoginId` -> Overly long email string entered.\n3. Click on `button:has-text(\"Sign in\")` -> Handled gracefully with validation error.\n\n**Expected Output:** Inputs handle long string lengths without UI distortion or frontend crashing.\n\n**Pass / Fail Criteria:** PASS if UI remains responsive, text wraps or truncates cleanly, and server returns 400/401 cleanly. FAIL if UI layout breaks or browser freezes.\n\n---\n\n### \ud83d\uded1 Error Handling & Negative Flows\n\n#### [P0] Sign-In Rejection with Invalid Password `(pending_review)`\nVerify that authentication fails gracefully when incorrect password is provided.\n\n**Preconditions:** User is on /signin page.\n\n**Execution Steps:**\n1. Navigate on `http://localhost:5678/signin` -> Sign in form is visible.\n2. Fill on `#emailOrLdapLoginId` -> Email is entered.\n3. Fill on `#password` -> Invalid password is typed.\n4. Click on `button:has-text(\"Sign in\")` -> Error notification is displayed indicating invalid credentials.\n\n**Expected Output:** User remains on signin page with an explicit error notification and no session is created.\n\n**Pass / Fail Criteria:** PASS if an authentication error notification appears and route remains on /signin. FAIL if unauthorized access is granted or page crashes.\n\n#### [P2] Graceful 404 Error Handling for Invalid Routes `(pending_review)`\nVerify handling of non-existent application routes (404 Page Not Found).\n\n**Preconditions:** User is authenticated.\n\n**Execution Steps:**\n1. Navigate on `http://localhost:5678/non-existent-route-404` -> 404 Not Found view is shown.\n2. Click on `button:has-text(\"Go back\")` -> Returns user back to previous valid view.\n\n**Expected Output:** User is presented with a user-friendly 404 page with a 'Go back' navigation option.\n\n**Pass / Fail Criteria:** PASS if 404 error page renders cleanly with a working 'Go back' button. FAIL if white-screen crash or unhandled console errors occur.\n\n#### [P0] Unauthorized Access Redirection to Login `(pending_review)`\nVerify session redirect behavior when accessing authenticated routes without a valid session.\n\n**Preconditions:** User session is cleared/logged out.\n\n**Execution Steps:**\n1. Navigate on `http://localhost:5678/settings` -> Application intercepts request and redirects to /signin?redirect=%2Fsettings.\n2. Assert on `#emailOrLdapLoginId` -> Login form is presented.\n\n**Expected Output:** Unauthenticated access redirects to /signin with original path encoded in redirect query parameter.\n\n**Pass / Fail Criteria:** PASS if unauthorized request is redirected to /signin?redirect=... FAIL if protected data is leaked or page stays blank.\n\n---\n",
+  "created_at": "2026-09-05T11:50:29.494538",
+  "updated_at": "2026-09-05T11:50:29.496122",
+  "scenarios": [
+    {
+      "id": "a2045649-8768-4fc2-8957-aa283d9c8fb9",
+      "test_plan_id": "6783e3f7-3220-4eec-8c46-cf030624df14",
+      "title": "Successful User Sign-In with Valid Credentials",
+      "category": "happy_path",
+      "priority": "P0",
+      "preconditions": "User is logged out on http://localhost:5678/signin.",
+      "description": "Verify that a user can successfully authenticate using valid email and password credentials.",
+      "steps": [
+        {
+          "action": "Navigate",
+          "step_number": 1,
+          "expected_outcome": "Sign in page renders with email and password inputs.",
+          "target_element": "http://localhost:5678/signin"
+        },
+        {
+          "target_element": "#emailOrLdapLoginId",
+          "action": "Fill",
+          "expected_outcome": "Email input contains srijan.psn@gmail.com.",
+          "step_number": 2
+        },
+        {
+          "expected_outcome": "Password input contains Password1.",
+          "target_element": "#password",
+          "action": "Fill",
+          "step_number": 3
+        },
+        {
+          "action": "Click",
+          "step_number": 4,
+          "target_element": "button:has-text(\"Sign in\")",
+          "expected_outcome": "Authentication request succeeds and redirects to dashboard/assistant."
+        }
+      ],
+      "expected_result": "User is authenticated and redirected to the application onboard/dashboard view.",
+      "pass_fail_criteria": "PASS if HTTP 200/redirect occurs and user lands on dashboard or assistant view. FAIL if error message displays or remains on sign-in page.",
+      "script_path": "tests/test_01_happy_path_successful_user_sign_in_with_v.spec.py",
+      "status": "automated",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 0,
+      "created_at": "2026-09-05T11:50:29.497024"
+    },
+    {
+      "id": "a82fe2d8-4575-4cc0-b67b-cca4c8754b99",
+      "test_plan_id": "6783e3f7-3220-4eec-8c46-cf030624df14",
+      "title": "Sign-In Rejection with Invalid Password",
+      "category": "error_flow",
+      "priority": "P0",
+      "preconditions": "User is on /signin page.",
+      "description": "Verify that authentication fails gracefully when incorrect password is provided.",
+      "steps": [
+        {
+          "target_element": "http://localhost:5678/signin",
+          "step_number": 1,
+          "action": "Navigate",
+          "expected_outcome": "Sign in form is visible."
+        },
+        {
+          "target_element": "#emailOrLdapLoginId",
+          "step_number": 2,
+          "action": "Fill",
+          "expected_outcome": "Email is entered."
+        },
+        {
+          "action": "Fill",
+          "expected_outcome": "Invalid password is typed.",
+          "target_element": "#password",
+          "step_number": 3
+        },
+        {
+          "target_element": "button:has-text(\"Sign in\")",
+          "expected_outcome": "Error notification is displayed indicating invalid credentials.",
+          "action": "Click",
+          "step_number": 4
+        }
+      ],
+      "expected_result": "User remains on signin page with an explicit error notification and no session is created.",
+      "pass_fail_criteria": "PASS if an authentication error notification appears and route remains on /signin. FAIL if unauthorized access is granted or page crashes.",
+      "script_path": "tests/test_02_error_flow_sign_in_rejection_with_invalid.spec.py",
+      "status": "automated",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 1,
+      "created_at": "2026-09-05T11:50:29.497029"
+    },
+    {
+      "id": "a40fb69b-e984-4076-bfb6-1dfbb5d90178",
+      "test_plan_id": "6783e3f7-3220-4eec-8c46-cf030624df14",
+      "title": "Empty Form Submission Validation on Sign-In",
+      "category": "edge_case",
+      "priority": "P1",
+      "preconditions": "User is on /signin page.",
+      "description": "Verify client/server validation behavior when submitting empty credentials on the sign-in form.",
+      "steps": [
+        {
+          "action": "Navigate",
+          "step_number": 1,
+          "target_element": "http://localhost:5678/signin",
+          "expected_outcome": "Sign in inputs are empty."
+        },
+        {
+          "action": "Click",
+          "step_number": 2,
+          "expected_outcome": "Validation triggers indicating fields are required.",
+          "target_element": "button:has-text(\"Sign in\")"
+        }
+      ],
+      "expected_result": "Form validation prevents submission or highlights missing required fields without unhandled exceptions.",
+      "pass_fail_criteria": "PASS if required field validation triggers and no login request is dispatched. FAIL if 500 error occurs.",
+      "script_path": "tests/test_03_edge_case_empty_form_submission_validati.spec.py",
+      "status": "automated",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 2,
+      "created_at": "2026-09-05T11:50:29.497032"
+    },
+    {
+      "id": "d56eeec2-52dc-4131-9433-d56ca846658d",
+      "test_plan_id": "6783e3f7-3220-4eec-8c46-cf030624df14",
+      "title": "Navigate to Forgot Password Flow",
+      "category": "happy_path",
+      "priority": "P1",
+      "preconditions": "User is unauthenticated on /signin.",
+      "description": "Verify navigation to forgot password view and presence of recovery instructions/inputs.",
+      "steps": [
+        {
+          "step_number": 1,
+          "expected_outcome": "Sign-in page loads with forgot password link.",
+          "action": "Navigate",
+          "target_element": "http://localhost:5678/signin"
+        },
+        {
+          "expected_outcome": "Navigates to /forgot-password route.",
+          "target_element": "a[href='/forgot-password']",
+          "step_number": 2,
+          "action": "Click"
+        }
+      ],
+      "expected_result": "Forgot password route is reachable and displays recovery interface or redirection.",
+      "pass_fail_criteria": "PASS if forgot password view loads with 200 HTTP status and proper recovery controls. FAIL if 404 or uncaught exception.",
+      "script_path": "tests/test_04_happy_path_navigate_to_forgot_password_fl.spec.py",
+      "status": "automated",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 3,
+      "created_at": "2026-09-05T11:50:29.497035"
+    },
+    {
+      "id": "7ab4a577-30c9-4590-9dbe-af2abb03fad6",
+      "test_plan_id": "6783e3f7-3220-4eec-8c46-cf030624df14",
+      "title": "Create and Initialize New Workflow Canvas",
+      "category": "happy_path",
+      "priority": "P0",
+      "preconditions": "User is authenticated in n8n.",
+      "description": "Verify initialization of a new workflow canvas from navigation.",
+      "steps": [
+        {
+          "action": "Navigate",
+          "target_element": "http://localhost:5678/workflow/new",
+          "expected_outcome": "Navigates to workflow creation endpoint.",
+          "step_number": 1
+        },
+        {
+          "target_element": "button:has-text(\"Publish\")",
+          "action": "Assert",
+          "expected_outcome": "Workflow editor is visible with Publish button and canvas.",
+          "step_number": 2
+        }
+      ],
+      "expected_result": "A new empty workflow is generated with canvas, editor controls, and unique workflow ID.",
+      "pass_fail_criteria": "PASS if /workflow/new initializes a workflow canvas with Editor/Executions tabs and Publish button. FAIL if canvas fails to render.",
+      "script_path": "tests/test_05_happy_path_create_and_initialize_new_work.spec.py",
+      "status": "automated",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 4,
+      "created_at": "2026-09-05T11:50:29.497038"
+    },
+    {
+      "id": "a254857e-b671-4473-992a-a03cedf7675f",
+      "test_plan_id": "6783e3f7-3220-4eec-8c46-cf030624df14",
+      "title": "Access Settings Configuration Dashboard",
+      "category": "happy_path",
+      "priority": "P1",
+      "preconditions": "User is authenticated with administrative privileges.",
+      "description": "Verify access to Settings overview and sub-navigation links.",
+      "steps": [
+        {
+          "step_number": 1,
+          "expected_outcome": "Settings page loads successfully.",
+          "action": "Navigate",
+          "target_element": "http://localhost:5678/settings"
+        },
+        {
+          "step_number": 2,
+          "target_element": "a[href='/settings/users']",
+          "expected_outcome": "Settings sub-links (Users, API, Usage) are visible.",
+          "action": "Assert"
+        }
+      ],
+      "expected_result": "Settings dashboard renders with navigation tabs for Personal, Users, API, SSO, and Security.",
+      "pass_fail_criteria": "PASS if settings dashboard and sidebar options render correctly. FAIL if settings route throws 500 or blank screen.",
+      "script_path": "tests/test_06_happy_path_access_settings_configuration_.spec.py",
+      "status": "automated",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 5,
+      "created_at": "2026-09-05T11:50:29.497041"
+    },
+    {
+      "id": "9bedf1a3-d6ff-4af9-86d5-f892c1d997f3",
+      "test_plan_id": "6783e3f7-3220-4eec-8c46-cf030624df14",
+      "title": "AI Assistant Onboarding and Dismissal",
+      "category": "happy_path",
+      "priority": "P2",
+      "preconditions": "User is authenticated on /assistant.",
+      "description": "Verify AI Assistant onboarding view and options to setup or postpone.",
+      "steps": [
+        {
+          "expected_outcome": "AI Assistant onboarding screen appears.",
+          "target_element": "http://localhost:5678/assistant",
+          "step_number": 1,
+          "action": "Navigate"
+        },
+        {
+          "expected_outcome": "Redirects to main workflows view.",
+          "target_element": "button:has-text(\"Set up later in Settings\")",
+          "action": "Click",
+          "step_number": 2
+        }
+      ],
+      "expected_result": "AI Assistant banner displays option to 'Get started' or 'Set up later in Settings'.",
+      "pass_fail_criteria": "PASS if clicking 'Set up later in Settings' dismisses the prompt and redirects to /home/workflows. FAIL if dialog cannot be dismissed.",
+      "script_path": "tests/test_07_happy_path_ai_assistant_onboarding_and_di.spec.py",
+      "status": "automated",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 6,
+      "created_at": "2026-09-05T11:50:29.497044"
+    },
+    {
+      "id": "c2c06045-d468-433f-b56e-249c394dc819",
+      "test_plan_id": "6783e3f7-3220-4eec-8c46-cf030624df14",
+      "title": "Graceful 404 Error Handling for Invalid Routes",
+      "category": "error_flow",
+      "priority": "P2",
+      "preconditions": "User is authenticated.",
+      "description": "Verify handling of non-existent application routes (404 Page Not Found).",
+      "steps": [
+        {
+          "step_number": 1,
+          "target_element": "http://localhost:5678/non-existent-route-404",
+          "action": "Navigate",
+          "expected_outcome": "404 Not Found view is shown."
+        },
+        {
+          "action": "Click",
+          "expected_outcome": "Returns user back to previous valid view.",
+          "step_number": 2,
+          "target_element": "button:has-text(\"Go back\")"
+        }
+      ],
+      "expected_result": "User is presented with a user-friendly 404 page with a 'Go back' navigation option.",
+      "pass_fail_criteria": "PASS if 404 error page renders cleanly with a working 'Go back' button. FAIL if white-screen crash or unhandled console errors occur.",
+      "script_path": "tests/test_08_error_flow_graceful_404_error_handling_fo.spec.py",
+      "status": "automated",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 7,
+      "created_at": "2026-09-05T11:50:29.497047"
+    },
+    {
+      "id": "e4d08099-3f54-4238-9d56-abb53fa58c17",
+      "test_plan_id": "6783e3f7-3220-4eec-8c46-cf030624df14",
+      "title": "Special Character and Injection Resilience in Login Identifier",
+      "category": "edge_case",
+      "priority": "P1",
+      "preconditions": "User is on /signin page.",
+      "description": "Verify application resilience when entering special characters and SQL/XSS payloads into the login identifier.",
+      "steps": [
+        {
+          "expected_outcome": "Sign-in page loads.",
+          "action": "Navigate",
+          "target_element": "http://localhost:5678/signin",
+          "step_number": 1
+        },
+        {
+          "action": "Fill",
+          "expected_outcome": "Special characters and quotes accepted into input safely.",
+          "target_element": "#emailOrLdapLoginId",
+          "step_number": 2
+        },
+        {
+          "target_element": "#password",
+          "expected_outcome": "Password filled.",
+          "action": "Fill",
+          "step_number": 3
+        },
+        {
+          "action": "Click",
+          "target_element": "button:has-text(\"Sign in\")",
+          "step_number": 4,
+          "expected_outcome": "Clean rejection response without script execution."
+        }
+      ],
+      "expected_result": "Input is safely sanitized or validated without executing scripts or causing 500 server errors.",
+      "pass_fail_criteria": "PASS if input is rejected safely with invalid credential notification and no script executes. FAIL if XSS executes or 500 internal server error is returned.",
+      "script_path": "tests/test_09_edge_case_special_character_and_injectio.spec.py",
+      "status": "automated",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 8,
+      "created_at": "2026-09-05T11:50:29.497050"
+    },
+    {
+      "id": "e1d66182-6abc-4602-af19-5eacd68d6776",
+      "test_plan_id": "6783e3f7-3220-4eec-8c46-cf030624df14",
+      "title": "Input Boundary and Overflow Handling on Sign-In Inputs",
+      "category": "edge_case",
+      "priority": "P2",
+      "preconditions": "User is on /signin page.",
+      "description": "Verify sign-in input boundary testing with maximum length strings (>256 characters).",
+      "steps": [
+        {
+          "target_element": "http://localhost:5678/signin",
+          "expected_outcome": "Sign in page loads.",
+          "action": "Navigate",
+          "step_number": 1
+        },
+        {
+          "action": "Fill",
+          "step_number": 2,
+          "expected_outcome": "Overly long email string entered.",
+          "target_element": "#emailOrLdapLoginId"
+        },
+        {
+          "action": "Click",
+          "step_number": 3,
+          "expected_outcome": "Handled gracefully with validation error.",
+          "target_element": "button:has-text(\"Sign in\")"
+        }
+      ],
+      "expected_result": "Inputs handle long string lengths without UI distortion or frontend crashing.",
+      "pass_fail_criteria": "PASS if UI remains responsive, text wraps or truncates cleanly, and server returns 400/401 cleanly. FAIL if UI layout breaks or browser freezes.",
+      "script_path": "tests/test_10_edge_case_input_boundary_and_overflow_ha.spec.py",
+      "status": "automated",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 9,
+      "created_at": "2026-09-05T11:50:29.497053"
+    },
+    {
+      "id": "d47bede2-4043-45dc-9d92-00527d1a21a6",
+      "test_plan_id": "6783e3f7-3220-4eec-8c46-cf030624df14",
+      "title": "Workflow View Tab Switching (Editor vs Executions)",
+      "category": "happy_path",
+      "priority": "P1",
+      "preconditions": "User is on a workflow view (/workflow/new).",
+      "description": "Verify navigation between Workflow canvas tabs (Editor, Executions, Evaluations).",
+      "steps": [
+        {
+          "action": "Navigate",
+          "target_element": "http://localhost:5678/workflow/new",
+          "expected_outcome": "Workflow canvas is displayed with tab bar.",
+          "step_number": 1
+        },
+        {
+          "expected_outcome": "Executions log view is displayed.",
+          "step_number": 2,
+          "action": "Click",
+          "target_element": "button:has-text(\"Executions\")"
+        },
+        {
+          "expected_outcome": "Editor canvas view is restored.",
+          "step_number": 3,
+          "action": "Click",
+          "target_element": "button:has-text(\"Editor\")"
+        }
+      ],
+      "expected_result": "User can switch seamlessly between Editor and Executions sub-views.",
+      "pass_fail_criteria": "PASS if tab clicks change active view state without page reloads or errors. FAIL if switching tabs results in UI lockup.",
+      "script_path": "tests/test_11_happy_path_workflow_view_tab_switching_ed.spec.py",
+      "status": "automated",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 10,
+      "created_at": "2026-09-05T11:50:29.497056"
+    },
+    {
+      "id": "10497bc9-8553-4604-8276-c35c3b77e761",
+      "test_plan_id": "6783e3f7-3220-4eec-8c46-cf030624df14",
+      "title": "Unauthorized Access Redirection to Login",
+      "category": "error_flow",
+      "priority": "P0",
+      "preconditions": "User session is cleared/logged out.",
+      "description": "Verify session redirect behavior when accessing authenticated routes without a valid session.",
+      "steps": [
+        {
+          "target_element": "http://localhost:5678/settings",
+          "step_number": 1,
+          "expected_outcome": "Application intercepts request and redirects to /signin?redirect=%2Fsettings.",
+          "action": "Navigate"
+        },
+        {
+          "expected_outcome": "Login form is presented.",
+          "step_number": 2,
+          "target_element": "#emailOrLdapLoginId",
+          "action": "Assert"
+        }
+      ],
+      "expected_result": "Unauthenticated access redirects to /signin with original path encoded in redirect query parameter.",
+      "pass_fail_criteria": "PASS if unauthorized request is redirected to /signin?redirect=... FAIL if protected data is leaked or page stays blank.",
+      "script_path": "tests/test_12_error_flow_unauthorized_access_redirectio.spec.py",
+      "status": "automated",
+      "healing_notes": null,
+      "healing_status": null,
+      "execution_order": 11,
+      "created_at": "2026-09-05T11:50:29.497059"
+    }
+  ]
+}

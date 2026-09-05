@@ -91,8 +91,69 @@
         </h3>
         <div>
           <label for="scope_instructions" class="block text-xs font-medium text-slate-700">Testing Boundaries</label>
-          <textarea id="scope_instructions" name="scope_instructions" rows="3"
+          <textarea id="scope_instructions" name="scope_instructions" rows="2"
             class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none font-mono text-xs">{{ project.scope_instructions or '' }}</textarea>
+        </div>
+      </div>
+
+      <div class="space-y-4 pt-4 border-t border-slate-100">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-semibold text-slate-900 flex items-center">
+            <i class="fa-solid fa-sitemap mr-2 text-indigo-500"></i>Autonomous Crawler & Test Planning Controls
+          </h3>
+          <span class="text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">Deep Navigation</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label for="crawl_depth" class="block text-xs font-medium text-slate-700">Crawl Depth</label>
+            <select id="crawl_depth" name="crawl_depth"
+              class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none bg-white">
+              <option value="1" {% if project.crawl_depth == 1 %}selected{% endif %}>1 - Single Landing Page</option>
+              <option value="2" {% if (project.crawl_depth or 2) == 2 %}selected{% endif %}>2 - Standard (Direct Links & Menus)</option>
+              <option value="3" {% if project.crawl_depth == 3 %}selected{% endif %}>3 - Deep (Sub-routes & Nested Views)</option>
+              <option value="4" {% if project.crawl_depth == 4 %}selected{% endif %}>4 - Very Deep (Exhaustive)</option>
+              <option value="5" {% if project.crawl_depth == 5 %}selected{% endif %}>5 - Maximum Depth</option>
+            </select>
+            <p class="text-[10px] text-slate-400 mt-1">Number of link hops from base URL.</p>
+          </div>
+
+          <div>
+            <label for="max_pages" class="block text-xs font-medium text-slate-700">Max Routes / Pages</label>
+            <input type="number" id="max_pages" name="max_pages" min="1" max="50" value="{{ project.max_pages or 10 }}"
+              class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none bg-white">
+            <p class="text-[10px] text-slate-400 mt-1">Cap on unique pages cataloged.</p>
+          </div>
+
+          <div>
+            <label for="target_test_count" class="block text-xs font-medium text-slate-700">Target Scenario Quota</label>
+            <input type="number" id="target_test_count" name="target_test_count" min="5" max="50" value="{{ project.target_test_count or 12 }}"
+              class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none bg-white">
+            <p class="text-[10px] text-slate-400 mt-1">Minimum test cases to generate (>=12).</p>
+          </div>
+        </div>
+
+        <div>
+          <label for="exploration_strategy" class="block text-xs font-medium text-slate-700">Exploration Tour Strategy</label>
+          <select id="exploration_strategy" name="exploration_strategy"
+            class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none bg-white">
+            <option value="balanced" {% if (project.exploration_strategy or 'balanced') == 'balanced' %}selected{% endif %}>Balanced Multi-Route Coverage (Navigation + Forms + Error Boundaries)</option>
+            <option value="deep_crawl" {% if project.exploration_strategy == 'deep_crawl' %}selected{% endif %}>Deep Route Discovery (Breadth-First Site Mapping)</option>
+            <option value="form_heavy" {% if project.exploration_strategy == 'form_heavy' %}selected{% endif %}>Form & Boundary Probing (Input Limits, Edge Cases)</option>
+            <option value="critical_paths" {% if project.exploration_strategy == 'critical_paths' %}selected{% endif %}>Critical Business Journeys & Auth Workflows</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="space-y-4 pt-4 border-t border-slate-100">
+        <h3 class="text-sm font-semibold text-slate-900 flex items-center">
+          <i class="fa-solid fa-file-contract mr-2 text-indigo-500"></i>Product Requirement Document (PRD)
+        </h3>
+        <div>
+          <label for="prd_text" class="block text-xs font-medium text-slate-700">Specification & Acceptance Criteria</label>
+          <textarea id="prd_text" name="prd_text" rows="5"
+            placeholder="Paste your PRD or Markdown spec here..."
+            class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none font-mono text-xs">{{ project.prd_text or '' }}</textarea>
         </div>
       </div>
 

@@ -3,6 +3,7 @@
 {% block title %}Run {{ run.id[:8] }} - Live Console | Aitesty{% endblock %}
 
 {% block content %}
+{% set stats = stats if (stats is defined and stats is not none) else run.get_summary_stats() %}
 <div class="space-y-6">
   <!-- Breadcrumb -->
   <nav class="flex text-xs text-slate-500 space-x-2">
@@ -20,6 +21,8 @@
         <h1 class="text-xl font-bold text-slate-900 tracking-tight">
           {% if run.run_type == 'exploration' %}
             Autonomous Exploration Run
+          {% elif run.run_type == 'test_generation' %}
+            Autonomous Test Creation Run
           {% else %}
             Playwright Test Suite Run
           {% endif %}
@@ -51,7 +54,20 @@
     </div>
 
     <!-- Actions -->
-    <div class="flex items-center space-x-3">
+      {% if run.run_type == 'test_execution' and run.status in ['completed', 'failed'] %}
+        <a href="/api/runs/{{ run.id }}/report/html" target="_blank"
+          class="inline-flex items-center px-4 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-600/20 transition">
+          <i class="fa-solid fa-file-invoice mr-1.5"></i>View Quality Report
+        </a>
+      {% endif %}
+
+      {% if (run.run_type in ['test_execution', 'execution'] or run.status == 'failed' or (stats and stats.get('failed', 0) > 0)) and run.status in ['completed', 'failed'] %}
+        <button type="button" onclick="triggerHealingForRun('{{ project.id }}', '{{ run.id }}')" id="btn-heal-run"
+          class="inline-flex items-center px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-amber-500 via-rose-500 to-indigo-600 hover:opacity-95 shadow-md shadow-indigo-600/20 transition">
+          <i class="fa-solid fa-wand-magic-sparkles mr-1.5 text-amber-200"></i>Analyze & Heal Run
+        </button>
+      {% endif %}
+
       {% if run.status in ['queued', 'running'] %}
         <button type="button" onclick="cancelActiveRun('{{ run.id }}')" id="btn-cancel-run"
           class="inline-flex items-center px-4 py-2 rounded-xl text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition">
@@ -67,7 +83,7 @@
   </div>
 
   <!-- Run Statistics Cards -->
-  {% set stats = run.get_summary_stats() %}
+  {% set stats = stats or run.get_summary_stats() %}
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
     <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
       <div class="text-slate-400 font-medium">Trigger Source</div>
@@ -75,25 +91,54 @@
     </div>
     <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
       <div class="text-slate-400 font-medium">
-        {% if run.run_type == 'exploration' %}Scenarios Synthesized{% else %}Tests Passed{% endif %}
+        {% if run.run_type == 'exploration' %}
+          Scenarios Synthesized
+        {% elif run.run_type == 'test_generation' %}
+          Subtests Generated
+        {% else %}
+          Subtests Executed
+        {% endif %}
       </div>
-      <div id="stat-primary" class="text-base font-bold text-emerald-600 mt-1">
+      <div id="stat-primary" class="text-base font-bold text-indigo-600 mt-1">
         {% if run.run_type == 'exploration' %}
           {{ stats.get('total_scenarios', '--') }}
+        {% elif run.run_type == 'test_generation' %}
+          {{ stats.get('subtests_created', (stats.get('files_created', 0) * 3)) }}
         {% else %}
-          {{ stats.get('passed', 0) }} / {{ stats.get('total', 0) }}
+          {{ stats.get('subtests_total', stats.get('total', 0)) }}
+        {% endif %}
+      </div>
+      <div class="text-[11px] text-slate-400 mt-0.5">
+        {% if run.run_type == 'test_execution' %}
+          <span class="text-emerald-600 font-medium">{{ stats.get('passed', 0) }} passed</span>, <span class="text-rose-600 font-medium">{{ stats.get('failed', 0) }} failed</span>
+        {% elif run.run_type == 'test_generation' %}
+          {{ stats.get('scenarios_automated', 0) }} scenario(s)
         {% endif %}
       </div>
     </div>
     <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
       <div class="text-slate-400 font-medium">
-        {% if run.run_type == 'exploration' %}Routes Discovered{% else %}Failed / Skipped{% endif %}
+        {% if run.run_type == 'exploration' %}
+          Routes Discovered
+        {% elif run.run_type == 'test_generation' %}
+          Spec Files Created
+        {% else %}
+          Spec Files Executed
+        {% endif %}
       </div>
       <div id="stat-secondary" class="text-base font-bold text-slate-800 mt-1">
         {% if run.run_type == 'exploration' %}
           {{ stats.get('routes_discovered', '--') }}
+        {% elif run.run_type == 'test_generation' %}
+          {{ stats.get('files_created', '--') }}
         {% else %}
-          {{ stats.get('failed', 0) }}
+          {{ stats.get('tests_count') or (stats.get('subtests_per_test') or [])|length or '--' }}
+        {% endif %}
+      </div>
+      <div class="text-[11px] text-slate-400 mt-0.5">
+        {% if run.run_type == 'test_execution' %}
+          <span class="text-rose-600 font-bold">{{ stats.get('app_defects', 0) }} bugs</span>,
+          <span class="text-amber-600 font-bold">{{ stats.get('automation_failures', 0) }} script</span>
         {% endif %}
       </div>
     </div>
@@ -105,8 +150,176 @@
     </div>
   </div>
 
-  <!-- Live Terminal Console -->
-  <div class="bg-slate-900 rounded-2xl border border-slate-800 shadow-xl overflow-hidden flex flex-col min-h-[500px]">
+  <!-- Subtests Breakdown per Test Specification -->
+  {% if stats.get('subtests_per_test') %}
+    <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
+      <div class="flex items-center justify-between">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center">
+          <i class="fa-solid fa-flask-vial mr-2 text-indigo-600"></i>Subtests per Test Specification
+        </h3>
+        <span class="text-xs text-slate-500 font-medium">
+          {{ stats.get('subtests_per_test')|length }} Spec File(s) &bull; {{ stats.get('subtests_total', stats.get('subtests_created', 0)) }} Total Subtests
+        </span>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {% for item in stats.get('subtests_per_test') %}
+          <div class="bg-slate-50 rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between space-y-2">
+            <div class="flex items-start justify-between gap-2">
+              <div class="truncate">
+                <div class="font-mono text-xs font-bold text-slate-800 truncate" title="{{ item.file_name or item.file }}">
+                  {{ item.file_name or item.file }}
+                </div>
+              </div>
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-700 border border-indigo-200 shrink-0">
+                {{ item.subtests_total or item.subtests_count }} subtest{{ 's' if (item.subtests_total or item.subtests_count) != 1 else '' }}
+              </span>
+            </div>
+            {% if item.subtests %}
+              <div class="space-y-1 pt-1.5 border-t border-slate-200/70">
+                {% for sub in item.subtests %}
+                  <div class="flex items-center justify-between text-[11px] py-0.5 hover:bg-slate-100/70 px-1 rounded transition">
+                    <span class="text-slate-700 font-mono text-[10px] truncate max-w-[190px]" title="{{ sub.test_name }}">{{ sub.title or sub.test_name }}</span>
+                    <div class="flex items-center space-x-1.5 shrink-0">
+                      {% if sub.status == 'passed' %}
+                        <span class="text-emerald-600 font-semibold text-[10px] flex items-center"><i class="fa-solid fa-check mr-1"></i>Passed</span>
+                      {% else %}
+                        <span class="text-rose-600 font-semibold text-[10px] flex items-center"><i class="fa-solid fa-xmark mr-1"></i>Failed</span>
+                      {% endif %}
+                      <button type="button" onclick="openIsolatedLogsModal('{{ run.id }}', '{{ sub.test_name }}', '{{ sub.title or sub.test_name }}')"
+                        class="px-1.5 py-0.5 rounded text-[10px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition" title="View isolated logs for this testcase">
+                        <i class="fa-solid fa-terminal mr-0.5"></i>Logs
+                      </button>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Autonomous Results Analysis & Healing Report (if generated) -->
+  {% set healing_report = healing_data or (stats.get('analyses') and stats) %}
+  {% if healing_report and healing_report.get('analyses') %}
+    <div class="bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-950 text-white rounded-2xl border border-indigo-500/30 p-6 shadow-xl space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-4 border-b border-indigo-500/20 pb-4">
+        <div class="space-y-1">
+          <div class="flex items-center space-x-2">
+            <span class="w-3 h-3 rounded-full bg-amber-400 animate-ping inline-block"></span>
+            <h3 class="text-sm font-bold uppercase tracking-wider text-amber-300 flex items-center">
+              <i class="fa-solid fa-wand-magic-sparkles mr-2 text-amber-400"></i>Autonomous Results Analysis & Healing Report
+            </h3>
+          </div>
+          <p class="text-xs text-slate-300">
+            Examined {{ healing_report.analyses|length }} failed case(s) with root-cause attribution, validity checks, and guidance for planner and generator agents.
+          </p>
+        </div>
+
+        <div class="flex items-center space-x-3 text-xs">
+          <span class="px-2.5 py-1 rounded-lg bg-rose-950/80 text-rose-300 border border-rose-700 font-bold">
+            <i class="fa-solid fa-bug mr-1.5 text-rose-400"></i>{{ healing_report.app_defects_count or 0 }} Product Defects
+          </span>
+          <span class="px-2.5 py-1 rounded-lg bg-amber-950/80 text-amber-300 border border-amber-700 font-bold">
+            <i class="fa-solid fa-wrench mr-1.5 text-amber-400"></i>{{ healing_report.healed_tests_count or 0 }} Healed Scripts
+          </span>
+          {% if healing_report.invalid_tests_count %}
+            <span class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 font-bold">
+              <i class="fa-solid fa-ban mr-1.5 text-slate-400"></i>{{ healing_report.invalid_tests_count }} Invalid
+            </span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {% for a in healing_report.analyses %}
+          <div class="bg-slate-900/90 rounded-xl border {% if a.failure_origin == 'PRODUCT_DEFECT' %}border-rose-500/40{% else %}border-indigo-500/40{% endif %} p-4 space-y-3">
+            <div class="flex items-start justify-between gap-2">
+              <div class="space-y-0.5">
+                <div class="flex items-center space-x-2">
+                  <span class="font-mono text-xs font-bold text-white">{{ a.test_name }}</span>
+                  {% if a.failure_origin == 'PRODUCT_DEFECT' %}
+                    <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-rose-500 text-white tracking-wider">PRODUCT DEFECT</span>
+                  {% else %}
+                    <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-500 text-slate-950 tracking-wider">AUTOMATION ISSUE</span>
+                  {% endif %}
+                </div>
+                <div class="text-[11px] text-slate-400">Scenario: {{ a.scenario_title or 'N/A' }}</div>
+              </div>
+
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider
+                {% if a.verdict == 'REAL_BUG' %}bg-rose-950 text-rose-300 border border-rose-800
+                {% elif a.verdict == 'INVALID_TESTCASE' %}bg-slate-800 text-slate-300 border border-slate-700
+                {% else %}bg-indigo-950 text-indigo-300 border border-indigo-800{% endif %}">
+                {{ a.verdict }}
+              </span>
+            </div>
+
+            <p class="text-xs text-slate-200 leading-relaxed font-medium bg-slate-950/60 p-2.5 rounded-lg border border-slate-800">
+              {{ a.summary }}
+            </p>
+
+            <div class="text-[11px] space-y-2">
+              {% if a.suggested_fix %}
+                <div class="text-amber-200 bg-amber-950/40 p-2 rounded border border-amber-800/60 flex items-start space-x-1.5">
+                  <i class="fa-solid fa-lightbulb text-amber-400 mt-0.5 shrink-0"></i>
+                  <span><strong>Recommended Fix:</strong> {{ a.suggested_fix }}</span>
+                </div>
+              {% endif %}
+
+              {% if a.suggested_selectors %}
+                <div class="flex flex-wrap items-center gap-1 text-[10px]">
+                  <span class="text-slate-400">Resilient Selectors:</span>
+                  {% for sel in a.suggested_selectors %}
+                    <code class="px-1.5 py-0.5 rounded bg-slate-800 text-indigo-300 font-mono border border-slate-700">{{ sel }}</code>
+                  {% endfor %}
+                </div>
+              {% endif %}
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] pt-1">
+                <div class="bg-slate-950/40 p-2 rounded border border-slate-800/80">
+                  <span class="text-indigo-400 font-bold block mb-0.5"><i class="fa-solid fa-list-check mr-1"></i>Notes for Planner:</span>
+                  <span class="text-slate-300">{{ a.notes_for_planner }}</span>
+                </div>
+                <div class="bg-slate-950/40 p-2 rounded border border-slate-800/80">
+                  <span class="text-teal-400 font-bold block mb-0.5"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Notes for Generator:</span>
+                  <span class="text-slate-300">{{ a.notes_for_generator }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Log Viewing Mode Tabs Header -->
+  <div class="flex items-center justify-between bg-slate-100 p-1.5 rounded-xl border border-slate-200 text-xs">
+    <div class="flex items-center space-x-1">
+      <button type="button" onclick="switchLogViewMode('unified')" id="btn-tab-unified"
+        class="px-4 py-1.5 rounded-lg font-bold transition flex items-center space-x-2 bg-white text-indigo-700 shadow-xs">
+        <i class="fa-solid fa-terminal text-indigo-500"></i>
+        <span>Unified Live Console</span>
+      </button>
+
+      <button type="button" onclick="switchLogViewMode('isolated')" id="btn-tab-isolated"
+        class="px-4 py-1.5 rounded-lg font-medium transition flex items-center space-x-2 text-slate-600 hover:text-slate-900">
+        <i class="fa-solid fa-list-check text-slate-400"></i>
+        <span>Isolated Testcase Logs</span>
+        <span class="inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 ml-1" id="isolated-testcases-count-badge">
+          {{ results_data.get('tests')|length if results_data else (test_log_files|length if test_log_files else '--') }}
+        </span>
+      </button>
+    </div>
+
+    <div class="text-[11px] text-slate-500 font-mono pr-2">
+      Workspace Run ID: {{ run.id[:8] }}
+    </div>
+  </div>
+
+  <!-- View 1: Unified Live Terminal Console -->
+  <div id="unified-console-container" class="bg-slate-900 rounded-2xl border border-slate-800 shadow-xl overflow-hidden flex flex-col min-h-[500px]">
     <!-- Console Toolbar -->
     <div class="px-5 py-3 bg-slate-950 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-300">
       <div class="flex items-center space-x-3">
@@ -115,7 +328,7 @@
           <span class="w-3 h-3 rounded-full bg-amber-500/80 inline-block"></span>
           <span class="w-3 h-3 rounded-full bg-emerald-500/80 inline-block"></span>
         </div>
-        <span class="font-mono text-slate-400 text-[11px] pl-2">Live Execution Log Console</span>
+        <span class="font-mono text-slate-400 text-[11px] pl-2">Unified Execution Stream</span>
       </div>
 
       <div class="flex items-center space-x-4">
@@ -133,6 +346,14 @@
           <option value="ERROR">ERROR Only</option>
         </select>
 
+        <button type="button" onclick="toggleRawLogs()" id="btn-toggle-raw" class="text-[11px] text-slate-400 hover:text-slate-200">
+          <i class="fa-solid fa-file-lines mr-1"></i><span id="raw-toggle-label">Raw View</span>
+        </button>
+
+        <a href="/api/runs/{{ run.id }}/logs/raw" download="run_{{ run.id[:8] }}.log" class="text-[11px] text-slate-400 hover:text-slate-200">
+          <i class="fa-solid fa-download mr-1"></i>Download
+        </a>
+
         <button type="button" onclick="clearConsoleDisplay()" class="text-[11px] text-slate-400 hover:text-slate-200">
           <i class="fa-solid fa-eraser mr-1"></i>Clear
         </button>
@@ -141,19 +362,276 @@
 
     <!-- Monospace Terminal Output Container -->
     <div id="terminal-output" class="flex-1 p-5 font-mono text-xs text-slate-100 overflow-y-auto space-y-1.5 leading-relaxed selection:bg-indigo-500 selection:text-white max-h-[600px]">
-      <!-- Log items dynamically injected here -->
-      <div class="text-slate-500 text-[11px] italic" id="terminal-init-msg">Connecting to log stream for run {{ run.id }}...</div>
+      {% if run.logs.count() > 0 %}
+        {% for log in run.logs.all() %}
+          <div class="log-entry flex items-start space-x-2.5 hover:bg-slate-800/50 px-1.5 py-0.5 rounded transition" data-level="{{ log.level }}">
+            <span class="text-slate-500 select-none text-[11px] shrink-0 font-mono">[{{ log.timestamp.strftime('%H:%M:%S') if log.timestamp else '--:--:--' }}]</span>
+            <span class="px-1.5 py-0.2 rounded border text-[10px] font-bold tracking-wider shrink-0 uppercase font-mono {% if log.level == 'ERROR' %}text-rose-400 bg-rose-950/60 border-rose-800{% elif log.level == 'WARN' %}text-amber-400 bg-amber-950/60 border-amber-800{% elif log.level == 'DEBUG' %}text-slate-400 bg-slate-950/60 border-slate-800{% else %}text-blue-400 bg-blue-950/60 border-blue-800{% endif %}">
+              {{ log.level }}
+            </span>
+            <span class="text-slate-200 flex-1 break-words">{{ log.message }}</span>
+          </div>
+        {% endfor %}
+      {% elif raw_logs %}
+        {% for line in raw_logs.strip().split('\n') %}
+          <div class="log-entry flex items-start space-x-2 px-1.5 py-0.5 text-slate-300 font-mono text-xs">
+            <span class="text-slate-200 flex-1 break-words">{{ line }}</span>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="text-slate-500 text-[11px] italic" id="terminal-init-msg">Connecting to log stream for run {{ run.id }}...</div>
+      {% endif %}
+    </div>
+
+    <!-- Raw Verbatim Logs Container (Hidden by default) -->
+    <div id="raw-logs-view" class="hidden flex-1 p-5 font-mono text-xs text-slate-300 overflow-y-auto max-h-[600px] bg-slate-950">
+      <pre class="whitespace-pre-wrap leading-relaxed">{{ raw_logs or 'No log entries recorded yet.' }}</pre>
     </div>
   </div>
+
+  <!-- View 2: Isolated Per-Testcase Log Explorer (Hidden by default) -->
+  <div id="isolated-logs-container" class="hidden bg-slate-900 rounded-2xl border border-slate-800 shadow-xl overflow-hidden min-h-[550px] flex flex-col md:flex-row">
+    <!-- Testcase Sidebar Selector -->
+    <div class="w-full md:w-80 bg-slate-950 border-r border-slate-800 flex flex-col justify-between">
+      <div class="p-3 border-b border-slate-800 space-y-2">
+        <div class="text-xs font-bold text-slate-300 flex items-center justify-between">
+          <span>Testcase Executions</span>
+          <span class="text-[10px] font-mono text-slate-500" id="sidebar-test-count">0 items</span>
+        </div>
+        <input type="text" id="filter-isolated-tests-input" onkeyup="filterIsolatedTestcasesList(this.value)" placeholder="Search subtests..."
+          class="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500">
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-2 space-y-1 max-h-[500px]" id="isolated-testcase-selector-list">
+        <div class="p-4 text-center text-xs text-slate-500">Loading testcases...</div>
+      </div>
+    </div>
+
+    <!-- Testcase Log & Telemetry Detail View -->
+    <div class="flex-1 flex flex-col bg-slate-900">
+      <div class="px-5 py-3 bg-slate-950 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div class="flex items-center space-x-2 truncate">
+          <span id="active-testcase-status-badge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300">SELECT TEST</span>
+          <span id="active-testcase-title" class="font-mono font-bold text-slate-200 truncate">Choose a testcase to view isolated logs</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button type="button" onclick="copyActiveIsolatedLog()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] transition">
+            <i class="fa-regular fa-copy mr-1"></i>Copy
+          </button>
+        </div>
+      </div>
+
+      <!-- Isolated Monospace Log View -->
+      <div class="flex-1 p-5 font-mono text-xs text-slate-200 overflow-y-auto max-h-[600px] leading-relaxed bg-slate-900/90" id="active-testcase-log-body">
+        <div class="text-slate-500 text-xs italic text-center py-10">Select a testcase from the left panel to inspect its isolated execution log.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Isolated Test Log Modal -->
+  <div id="quick-isolated-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 text-slate-100 border border-slate-700 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden">
+      <div class="px-5 py-3.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center space-x-2.5">
+          <span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+          <h3 class="text-xs font-mono font-bold text-slate-200 truncate" id="quick-modal-title">Testcase Logs</h3>
+        </div>
+        <button type="button" onclick="closeIsolatedLogsModal()" class="text-slate-400 hover:text-white text-base">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="flex-1 p-5 overflow-y-auto font-mono text-xs text-slate-200 bg-slate-900" id="quick-modal-body">
+        Loading...
+      </div>
+      <div class="px-5 py-2.5 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-xs">
+        <span class="text-slate-500 text-[11px]">Isolated Execution Log</span>
+        <button type="button" onclick="closeIsolatedLogsModal()" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs transition">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script src="{{ url_for('static', filename='js/log_stream.js') }}"></script>
 <script>
+  let activeLogViewMode = 'unified';
+  let cachedTestcases = [];
+  let currentActiveTestName = null;
+
   document.addEventListener('DOMContentLoaded', () => {
     initLogStream("{{ run.id }}", "{{ project.id }}");
+    fetchRunTestcases("{{ run.id }}");
   });
+
+  async function triggerHealingForRun(projectId, runId) {
+    const btn = document.getElementById('btn-heal-run');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-1.5"></i>Analyzing & Healing...`;
+    }
+
+    try {
+      const res = await fetch(`/api/projects/${projectId}/heal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ run_ids: [runId] }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("Results Analysis & Healing Agent started! Run ID: " + data.run_id);
+        window.location.href = `/projects/${projectId}/runs/${data.run_id}`;
+      } else {
+        alert("Error: " + (data.error || "Could not launch healer."));
+        if (btn) btn.disabled = false;
+      }
+    } catch (e) {
+      alert("Healing trigger error: " + e.message);
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function switchLogViewMode(mode) {
+    activeLogViewMode = mode;
+    const unifiedTab = document.getElementById('btn-tab-unified');
+    const isolatedTab = document.getElementById('btn-tab-isolated');
+    const unifiedCont = document.getElementById('unified-console-container');
+    const isolatedCont = document.getElementById('isolated-logs-container');
+
+    if (mode === 'unified') {
+      unifiedTab.className = "px-4 py-1.5 rounded-lg font-bold transition flex items-center space-x-2 bg-white text-indigo-700 shadow-xs";
+      isolatedTab.className = "px-4 py-1.5 rounded-lg font-medium transition flex items-center space-x-2 text-slate-600 hover:text-slate-900";
+      unifiedCont.classList.remove('hidden');
+      isolatedCont.classList.add('hidden');
+    } else {
+      isolatedTab.className = "px-4 py-1.5 rounded-lg font-bold transition flex items-center space-x-2 bg-white text-indigo-700 shadow-xs";
+      unifiedTab.className = "px-4 py-1.5 rounded-lg font-medium transition flex items-center space-x-2 text-slate-600 hover:text-slate-900";
+      unifiedCont.classList.add('hidden');
+      isolatedCont.classList.remove('hidden');
+      if (cachedTestcases.length > 0 && !currentActiveTestName) {
+        selectIsolatedTestcase(cachedTestcases[0].test_name);
+      }
+    }
+  }
+
+  async function fetchRunTestcases(runId) {
+    try {
+      const res = await fetch(`/api/runs/${runId}/testcases`);
+      const data = await res.json();
+      cachedTestcases = data.testcases || [];
+      renderIsolatedTestcaseList(cachedTestcases);
+      const countBadge = document.getElementById('isolated-testcases-count-badge');
+      if (countBadge) countBadge.textContent = cachedTestcases.length;
+      const sidebarCount = document.getElementById('sidebar-test-count');
+      if (sidebarCount) sidebarCount.textContent = `${cachedTestcases.length} items`;
+    } catch (e) {
+      console.error("Failed to fetch run testcases:", e);
+    }
+  }
+
+  function renderIsolatedTestcaseList(items) {
+    const container = document.getElementById('isolated-testcase-selector-list');
+    if (!container) return;
+    if (items.length === 0) {
+      container.innerHTML = `<div class="p-4 text-center text-xs text-slate-500">No test cases executed yet.</div>`;
+      return;
+    }
+
+    container.innerHTML = items.map(tc => {
+      const isPassed = tc.status === 'passed';
+      const statusPill = isPassed
+        ? `<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">PASS</span>`
+        : `<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-950 text-rose-400 border border-rose-800">FAIL</span>`;
+      return `
+        <button type="button" onclick="selectIsolatedTestcase('${tc.test_name}')"
+          class="w-full text-left p-2.5 rounded-lg border border-slate-800/80 hover:bg-slate-900 hover:border-indigo-500/50 transition flex items-center justify-between text-xs group"
+          id="item-testcase-${tc.test_name}">
+          <div class="truncate pr-2">
+            <div class="font-mono text-slate-200 font-semibold truncate text-[11px]" title="${tc.test_name}">${tc.title || tc.test_name}</div>
+            <div class="text-[10px] text-slate-500 truncate">${tc.scenario_title || tc.category || 'test'}</div>
+          </div>
+          <div class="flex items-center space-x-1 shrink-0">
+            ${statusPill}
+          </div>
+        </button>
+      `;
+    }).join('');
+  }
+
+  function filterIsolatedTestcasesList(query) {
+    const q = (query || '').toLowerCase();
+    const filtered = cachedTestcases.filter(tc => 
+      tc.test_name.toLowerCase().includes(q) || (tc.title && tc.title.toLowerCase().includes(q))
+    );
+    renderIsolatedTestcaseList(filtered);
+  }
+
+  async function selectIsolatedTestcase(testName) {
+    currentActiveTestName = testName;
+    const body = document.getElementById('active-testcase-log-body');
+    const title = document.getElementById('active-testcase-title');
+    const badge = document.getElementById('active-testcase-status-badge');
+
+    if (title) title.textContent = testName;
+    if (body) body.innerHTML = `<div class="p-6 text-center text-xs text-slate-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading isolated log for ${testName}...</div>`;
+
+    try {
+      const res = await fetch(`/api/runs/{{ run.id }}/testcases/${testName}/logs`);
+      const data = await res.json();
+      
+      const tc = cachedTestcases.find(x => x.test_name === testName) || {};
+      if (badge) {
+        if (tc.status === 'passed') {
+          badge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800";
+          badge.textContent = "PASSED";
+        } else {
+          badge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950 text-rose-400 border border-rose-800";
+          badge.textContent = "FAILED";
+        }
+      }
+
+      let content = `<pre class="whitespace-pre-wrap leading-relaxed">${data.raw_log || 'No isolated log content found.'}</pre>`;
+      if (body) body.innerHTML = content;
+    } catch (e) {
+      if (body) body.innerHTML = `<div class="p-4 text-rose-400">Failed to load log: ${e.message}</div>`;
+    }
+  }
+
+  function copyActiveIsolatedLog() {
+    const body = document.getElementById('active-testcase-log-body');
+    if (!body) return;
+    navigator.clipboard.writeText(body.innerText).then(() => {
+      alert("Isolated testcase log copied to clipboard!");
+    });
+  }
+
+  async function openIsolatedLogsModal(runId, testName, testTitle) {
+    const modal = document.getElementById('quick-isolated-modal');
+    const titleEl = document.getElementById('quick-modal-title');
+    const bodyEl = document.getElementById('quick-modal-body');
+
+    if (titleEl) titleEl.textContent = `Testcase: ${testTitle || testName}`;
+    if (bodyEl) bodyEl.innerHTML = `<div class="p-6 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Fetching isolated log...</div>`;
+    if (modal) modal.classList.remove('hidden');
+
+    try {
+      const res = await fetch(`/api/runs/${runId}/testcases/${testName}/logs`);
+      const data = await res.json();
+      if (bodyEl) {
+        bodyEl.innerHTML = `<pre class="whitespace-pre-wrap leading-relaxed">${data.raw_log || 'No log recorded.'}</pre>`;
+      }
+    } catch (e) {
+      if (bodyEl) bodyEl.innerHTML = `<div class="text-rose-400">Error loading log: ${e.message}</div>`;
+    }
+  }
+
+  function closeIsolatedLogsModal() {
+    const modal = document.getElementById('quick-isolated-modal');
+    if (modal) modal.classList.add('hidden');
+  }
 
   async function cancelActiveRun(runId) {
     if (!confirm("Are you sure you want to cancel this run?")) return;
@@ -167,5 +645,22 @@
       alert("Error: " + e.message);
     }
   }
+
+  function toggleRawLogs() {
+    const formatted = document.getElementById('terminal-output');
+    const raw = document.getElementById('raw-logs-view');
+    const label = document.getElementById('raw-toggle-label');
+    if (!formatted || !raw) return;
+    if (raw.classList.contains('hidden')) {
+      raw.classList.remove('hidden');
+      formatted.classList.add('hidden');
+      if (label) label.textContent = 'Console View';
+    } else {
+      raw.classList.add('hidden');
+      formatted.classList.remove('hidden');
+      if (label) label.textContent = 'Raw View';
+    }
+  }
 </script>
 {% endblock %}
+
