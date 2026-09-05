@@ -237,6 +237,99 @@
     await triggerTestExecution(projectId, { target_file: filePath });
   }
 
+  async function runSingleSubtest(projectId, filePath, testName) {
+    if (!confirm(`Run subtest '${testName}' from ${filePath}?`)) return;
+    await triggerTestExecution(projectId, { target_file: filePath, target_tests: [testName] });
+  }
+
+  function getSelectedSpecFiles() {
+    const checked = document.querySelectorAll('.spec-file-chk:checked');
+    const paths = [];
+    checked.forEach(chk => {
+      const p = chk.getAttribute('data-filepath');
+      if (p) paths.push(p);
+    });
+    return paths;
+  }
+
+  function onSpecFileSelectChange() {
+    const selectedPaths = getSelectedSpecFiles();
+    const countRun = document.getElementById('selected-files-count-run');
+    const countDel = document.getElementById('selected-files-count-del');
+    const btnRun = document.getElementById('btn-run-selected-files');
+    const btnDel = document.getElementById('btn-delete-selected-files');
+    const label = document.getElementById('selected-spec-files-label');
+    const masterChk = document.getElementById('select-all-spec-files-chk');
+    const allCheckboxes = document.querySelectorAll('.spec-file-chk');
+
+    if (countRun) countRun.textContent = selectedPaths.length;
+    if (countDel) countDel.textContent = selectedPaths.length;
+
+    if (selectedPaths.length > 0) {
+      if (btnRun) btnRun.classList.remove('hidden');
+      if (btnDel) btnDel.classList.remove('hidden');
+      if (label) {
+        label.classList.remove('hidden');
+        label.textContent = `${selectedPaths.length} selected`;
+      }
+    } else {
+      if (btnRun) btnRun.classList.add('hidden');
+      if (btnDel) btnDel.classList.add('hidden');
+      if (label) label.classList.add('hidden');
+    }
+
+    if (masterChk && allCheckboxes.length > 0) {
+      masterChk.checked = selectedPaths.length === allCheckboxes.length;
+      masterChk.indeterminate = selectedPaths.length > 0 && selectedPaths.length < allCheckboxes.length;
+    }
+  }
+
+  function toggleSelectAllSpecFiles(masterCheckbox) {
+    const isChecked = masterCheckbox.checked;
+    document.querySelectorAll('.spec-file-chk').forEach(chk => {
+      chk.checked = isChecked;
+    });
+    onSpecFileSelectChange();
+  }
+
+  async function runSelectedTestFiles(projectId) {
+    const selectedPaths = getSelectedSpecFiles();
+    if (selectedPaths.length === 0) {
+      alert("Please select at least one test file to run.");
+      return;
+    }
+    if (!confirm(`Run ${selectedPaths.length} selected test specification(s)?`)) {
+      return;
+    }
+    await triggerTestExecution(projectId, { target_files: selectedPaths });
+  }
+
+  async function deleteSelectedTestFiles(projectId) {
+    const selectedPaths = getSelectedSpecFiles();
+    if (selectedPaths.length === 0) {
+      alert("Please select at least one test file to delete.");
+      return;
+    }
+    if (!confirm(`Are you sure you want to delete ${selectedPaths.length} test specification(s)?`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/projects/${projectId}/files/bulk-delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paths: selectedPaths }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        window.location.reload();
+      } else {
+        alert("Failed to delete files: " + (data.error || "Unknown error"));
+      }
+    } catch (e) {
+      alert("Error deleting files: " + e.message);
+    }
+  }
+
   async function runActiveTestFile(projectId) {
     const label = document.getElementById('active-file-label');
     if (!label) return;
@@ -250,7 +343,7 @@
   }
 
 
-  async function loadTestFile(projectId, filePath, clickedElem) {
+  async function loadTestFile(projectId, filePath, clickedElem, subtestCount) {
     document.querySelectorAll('.test-file-item').forEach(el => {
       el.classList.remove('bg-indigo-50', 'text-indigo-700', 'font-semibold', 'border', 'border-indigo-200');
       el.classList.add('text-slate-700');
@@ -262,6 +355,12 @@
     const label = document.getElementById('active-file-label');
     const editor = document.getElementById('test-code-editor');
     if (label) label.textContent = filePath;
+
+    const badgeText = document.getElementById('active-file-subtests-text');
+    const count = subtestCount !== undefined ? subtestCount : (clickedElem ? clickedElem.getAttribute('data-subtest-count') : null);
+    if (badgeText && count !== null) {
+      badgeText.textContent = `${count} subtest${count == 1 ? '' : 's'}`;
+    }
 
     try {
       const res = await fetch(`/api/projects/${projectId}/files/content?path=${encodeURIComponent(filePath)}`);

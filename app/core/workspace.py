@@ -197,11 +197,32 @@ class WorkspaceManager:
         files = []
         for p in tests_dir.glob("*.py"):
             stat = p.stat()
+            subtests = []
+            try:
+                import ast
+                content = p.read_text(encoding="utf-8")
+                tree = ast.parse(content)
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
+                        docstring = ast.get_docstring(node) or ""
+                        subtest_title = node.name.replace("test_", "").replace("_", " ").title()
+                        for line in docstring.split("\n"):
+                            clean_line = line.strip()
+                            if "Subtest:" in clean_line:
+                                subtest_title = clean_line.split("Subtest:")[-1].strip()
+                        subtests.append({
+                            "name": node.name,
+                            "title": subtest_title,
+                        })
+            except Exception:
+                pass
+
             files.append({
                 "name": p.name,
                 "path": f"tests/{p.name}",
                 "size_bytes": stat.st_size,
                 "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                "subtests": subtests,
             })
         for p in tests_dir.glob("*.ts"):
             stat = p.stat()
@@ -210,6 +231,7 @@ class WorkspaceManager:
                 "path": f"tests/{p.name}",
                 "size_bytes": stat.st_size,
                 "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                "subtests": [],
             })
         return sorted(files, key=lambda x: x["name"])
 

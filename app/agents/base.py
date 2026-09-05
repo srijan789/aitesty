@@ -104,6 +104,7 @@ class GeneratedTestFile:
     content: str
     scenario_ids: List[str] = field(default_factory=list)
     test_count: int = 1
+    subtest_count: int = 1
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -111,6 +112,7 @@ class GeneratedTestFile:
             "relative_path": self.relative_path,
             "scenario_ids": self.scenario_ids,
             "test_count": self.test_count,
+            "subtest_count": self.subtest_count,
         }
 
 @dataclass

@@ -1,0 +1,15 @@
+{
+  "id": "098d583d-5429-4f9c-8941-2b059558881f",
+  "name": "n8n demo1",
+  "description": "",
+  "target_url": "http://localhost:5678",
+  "auth_type": "form",
+  "credentials": {
+    "username": "srijan.psn@gmail.com",
+    "password": "Password1"
+  },
+  "scope_instructions": "",
+  "prd_text": "",
+  "created_at": "2026-09-05T09:01:39.578929",
+  "updated_at": "2026-09-05T09:01:39.582385"
+}

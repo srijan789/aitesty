@@ -30,16 +30,20 @@ def classify_failure(
     console_logs: Optional[List[Dict[str, Any]]] = None,
     page_url: str = "",
     dom_snippet: str = "",
+    element_candidates: Optional[List[Dict[str, Any]]] = None,
+    debug_logs: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
     Classifies a test failure into either:
     1. AUTOMATION_FAILURE: Broken test script, changed DOM selectors, timeout waiting for locator.
-       Provides diagnostic context for the Healer Sub-Agent to repair the testcase.
+       Provides diagnostic context and alternative selector suggestions for the Healer Sub-Agent.
     2. APP_DEFECT: Genuine product bug (HTTP 500, server offline, unhandled frontend crash, assertion mismatch).
        Provides defect report context for engineering triage.
     """
     network_logs = network_logs or []
     console_logs = console_logs or []
+    element_candidates = element_candidates or []
+    debug_logs = debug_logs or []
     err_lower = (error_message or "").lower()
     tb_lower = (traceback_str or "").lower()
 
@@ -59,11 +63,11 @@ def classify_failure(
                 "target_url": page_url,
                 "error": error_message,
                 "diagnosis": "Target application is offline / service unavailable.",
+                "debug_trace": debug_logs[-5:] if debug_logs else [],
             },
         }
 
     # 1. Check for backend server error responses (HTTP 5xx)
-
     server_errors = [
         n for n in network_logs
         if isinstance(n, dict) and n.get("type") == "response" and int(n.get("status", 200)) >= 500
@@ -84,6 +88,7 @@ def classify_failure(
                 "server_error_url": latest.get("url"),
                 "status_code": latest.get("status"),
                 "response_preview": latest.get("body_preview"),
+                "console_errors": [c for c in console_logs if str(c.get("type", "")).lower() in ["error", "warning"]],
             },
         }
 
@@ -112,7 +117,6 @@ def classify_failure(
 
     # 3. Check for Assertion Failure (App defect or semantic regression)
     if "assertionerror" in tb_lower or "assert" in err_lower:
-        # Extract expected vs actual if possible
         expected_match = re.search(r"expected:?\s*(.*?)(?:to|but|\n|$)", error_message, re.IGNORECASE)
         actual_match = re.search(r"actual|received:?\s*(.*?)(?:\n|$)", error_message, re.IGNORECASE)
         expected_val = expected_match.group(1).strip() if expected_match else None
@@ -132,26 +136,72 @@ def classify_failure(
                 "expected": expected_val,
                 "actual": actual_val,
                 "assertion_statement": error_message.strip(),
+                "suggested_fix": (
+                    f"If the application behavior changed intentionally, update assertion expected value from '{expected_val}' to '{actual_val}'."
+                    if expected_val and actual_val else "Inspect actual vs expected page state and verify if UI layout or copy updated."
+                ),
             },
         }
 
-    # 4. Check for Locator / Selector Timeouts (Automation Failure)
-    locator_pattern = re.compile(r"(?:waiting for (?:locator|selector)|locator\((['\"].*?['\"])\)|Page\.click: Timeout|Page\.fill: Timeout)", re.IGNORECASE)
-    loc_match = locator_pattern.search(error_message) or locator_pattern.search(traceback_str)
-
+    # 4. Check for Locator / Selector Timeouts (Automation Failure with Healer Matching)
     target_selector = None
-    if loc_match:
-        # Try to extract the selector string
-        sel_extract = re.search(r"['\"]([#.a-zA-Z0-9_\-\[\]=: ]+)['\"]", loc_match.group(0))
-        if sel_extract:
-            target_selector = sel_extract.group(1)
+    sel_extract = re.search(r"(?:locator|selector|waiting for)\s*\(?['\"]([#.a-zA-Z0-9_\-\[\]=: ]+)['\"]", error_message, re.IGNORECASE) or \
+                  re.search(r"(?:locator|selector|waiting for)\s*\(?['\"]([#.a-zA-Z0-9_\-\[\]=: ]+)['\"]", traceback_str, re.IGNORECASE)
+    if sel_extract:
+        target_selector = sel_extract.group(1)
+    else:
+        quoted = re.search(r"['\"]([#.a-zA-Z0-9_\-\[\]=: ]{2,50})['\"]", error_message)
+        if quoted:
+            target_selector = quoted.group(1)
 
     if "timeout" in err_lower and ("locator" in err_lower or "selector" in err_lower or "waiting for" in err_lower or "click" in tb_lower or "fill" in tb_lower):
+        # Match target_selector against available element candidates in DOM
+        alternative_selectors = []
+        matching_candidates = []
+        if target_selector and element_candidates:
+            clean_term = re.sub(r"[#._\-\[\]=:]", " ", target_selector).lower()
+            tokens = [w for w in clean_term.split() if len(w) > 2]
+            for cand in element_candidates:
+                cand_text = str(cand.get("text", "")).lower()
+                cand_id = str(cand.get("id", "")).lower()
+                cand_name = str(cand.get("name", "")).lower()
+                cand_tag = str(cand.get("tag", "")).lower()
+                cand_role = str(cand.get("role", "")).lower()
+                cand_type = str(cand.get("type", "")).lower()
+                cand_testid = str(cand.get("testid", "")).lower()
+
+                score = 0
+                for tok in tokens:
+                    if tok in cand_text or tok in cand_id or tok in cand_name or tok in cand_role or tok in cand_type or tok in cand_testid:
+                        score += 1
+
+                if score > 0 or (cand_tag in ["button", "input", "a"] and len(matching_candidates) < 4):
+                    matching_candidates.append(cand)
+                    if cand.get("testid"):
+                        alternative_selectors.append(f"[data-testid='{cand['testid']}']")
+                    if cand.get("id"):
+                        alternative_selectors.append(f"#{cand['id']}")
+                    elif cand.get("text") and len(cand["text"].strip()) < 30:
+                        alternative_selectors.append(f"{cand_tag}:has-text(\"{cand['text'].strip()}\")")
+                    elif cand.get("name"):
+                        alternative_selectors.append(f"{cand_tag}[name=\"{cand['name']}\"]")
+                    elif cand.get("role"):
+                        alternative_selectors.append(f"role={cand['role']}")
+
+        suggested_fix = None
+        if alternative_selectors:
+            suggested_fix = f"Replace broken selector '{target_selector}' with resilient alternative: '{alternative_selectors[0]}'"
+        elif target_selector:
+            suggested_fix = f"Element '{target_selector}' was not found. Inspect live DOM candidates to re-anchor locator."
+
+        matched_el = matching_candidates[0] if matching_candidates else (element_candidates[0] if element_candidates else None)
         return {
             "classification": FailureClassification.AUTOMATION_FAILURE,
             "subtype": FailureSubType.LOCATOR_TIMEOUT,
             "summary": f"Locator timeout: Unable to resolve element `{target_selector or 'target'}` within timeout",
             "confidence": 0.92,
+            "alternative_selectors": alternative_selectors[:5],
+            "suggested_fix": suggested_fix,
             "root_cause_analysis": (
                 f"The test script attempted to interact with element `{target_selector}`, but the element was not found in the DOM "
                 "or was not interactable. This is typically caused by UI changes, dynamic ID changes, or DOM restructuring."
@@ -159,12 +209,16 @@ def classify_failure(
             "healing_action": "HEAL_LOCATOR",
             "healing_context": {
                 "broken_selector": target_selector,
+                "suggested_fix": suggested_fix,
+                "alternative_selectors": alternative_selectors[:5],
+                "candidate_elements": matching_candidates[:6] if matching_candidates else element_candidates[:6],
+                "matched_element": matched_el,
                 "page_url": page_url,
-                "dom_snippet": dom_snippet[:500] if dom_snippet else None,
+                "dom_snippet": dom_snippet[:800] if dom_snippet else None,
                 "suggested_actions": [
-                    "Inspect current live DOM for alternative resilient attributes (e.g. data-testid, aria-label, role, visible text)",
-                    "Verify if element is inside an iframe or shadow DOM",
-                    "Check if navigation occurred before element appeared",
+                    f"Use resilient alternative selector: {alternative_selectors[0]}" if alternative_selectors else "Use get_by_role or text-based locator",
+                    "Verify if element is dynamically loaded or inside a modal/iframe",
+                    "Check if preceding navigation step completed fully",
                 ],
             },
         }
@@ -177,7 +231,7 @@ def classify_failure(
             "confidence": 0.80,
             "root_cause_analysis": "The target page took longer than the configured timeout to complete domcontentloaded.",
             "healing_action": "HEAL_TIMEOUT_OR_WAIT",
-            "healing_context": {"page_url": page_url},
+            "healing_context": {"page_url": page_url, "suggested_fix": "Increase page navigation timeout or use wait_until='load'"},
         }
 
     if "syntaxerror" in tb_lower or "attributeerror" in tb_lower or "nameerror" in tb_lower:
@@ -188,7 +242,7 @@ def classify_failure(
             "confidence": 0.95,
             "root_cause_analysis": "The generated test file contains invalid Python code, undefined variables, or invalid Playwright method calls.",
             "healing_action": "HEAL_SCRIPT_SYNTAX",
-            "healing_context": {"error": error_message},
+            "healing_context": {"error": error_message, "suggested_fix": "Regenerate or correct test function syntax and Playwright imports."},
         }
 
     # Default fallback classification
@@ -199,7 +253,11 @@ def classify_failure(
         "confidence": 0.50,
         "root_cause_analysis": "Could not conclusively distinguish between automation failure and application defect.",
         "healing_action": "MANUAL_REVIEW",
-        "healing_context": {"error_message": error_message, "traceback": traceback_str[:600]},
+        "healing_context": {
+            "error_message": error_message,
+            "traceback": traceback_str[:600],
+            "debug_trace": debug_logs[-5:] if debug_logs else [],
+        },
     }
 
 
@@ -207,16 +265,20 @@ class TestTelemetryLogger:
     """
     In-memory and file-based structured step logger designed to be called
     during Playwright test execution. Records detailed step execution breadcrumbs,
-    timings, network status, and failure artifacts.
+    microsecond timings, DOM candidates, network status, and failure artifacts.
     """
     __test__ = False
-
 
     def __init__(self, test_name: str, scenario_id: Optional[str] = None):
         self.test_name = test_name
         self.scenario_id = scenario_id
         self.started_at = datetime.utcnow()
         self.steps: List[Dict[str, Any]] = []
+        self.debug_logs: List[Dict[str, Any]] = []
+        self.network_events: List[Dict[str, Any]] = []
+        self.console_messages: List[Dict[str, Any]] = []
+        self.element_candidates: List[Dict[str, Any]] = []
+        self.dom_snapshot: Optional[str] = None
         self.status = "running"
         self.duration_ms = 0
         self.error_details: Optional[Dict[str, Any]] = None
@@ -232,10 +294,44 @@ class TestTelemetryLogger:
             "duration_ms": duration_ms,
             "status": "passed",
         })
+        self.log_debug("INFO", f"Step {step_number} [{action}] on '{target}' -> {outcome} ({duration_ms}ms)")
+
+    def log_debug(self, level: str, message: str, metadata: Optional[Dict[str, Any]] = None):
+        self.debug_logs.append({
+            "timestamp": datetime.utcnow().strftime("%H:%M:%S.%f")[:-3],
+            "level": level.upper(),
+            "message": message,
+            "metadata": metadata or {},
+        })
+
+    def log_network(self, method: str, url: str, status: int, duration_ms: int = 0, preview: str = ""):
+        self.network_events.append({
+            "timestamp": datetime.utcnow().strftime("%H:%M:%S.%f")[:-3],
+            "type": "response",
+            "method": method,
+            "url": url,
+            "status": status,
+            "duration_ms": duration_ms,
+            "body_preview": preview[:300] if preview else "",
+        })
+
+    def log_console(self, msg_type: str, text: str, location: str = ""):
+        self.console_messages.append({
+            "timestamp": datetime.utcnow().strftime("%H:%M:%S.%f")[:-3],
+            "type": msg_type,
+            "text": text,
+            "location": location,
+        })
+
+    def set_dom_context(self, dom_snippet: str, element_candidates: Optional[List[Dict[str, Any]]] = None):
+        self.dom_snapshot = dom_snippet
+        if element_candidates:
+            self.element_candidates = element_candidates
 
     def mark_passed(self):
         self.status = "passed"
         self.duration_ms = int((datetime.utcnow() - self.started_at).total_seconds() * 1000)
+        self.log_debug("INFO", f"Test {self.test_name} completed successfully in {self.duration_ms}ms")
 
     def mark_failed(
         self,
@@ -243,15 +339,32 @@ class TestTelemetryLogger:
         traceback_str: str = "",
         screenshot_path: Optional[str] = None,
         classification_data: Optional[Dict[str, Any]] = None,
+        page_url: str = "",
     ):
         self.status = "failed"
         self.duration_ms = int((datetime.utcnow() - self.started_at).total_seconds() * 1000)
         self.screenshot_path = screenshot_path
+
+        classification = classification_data or classify_failure(
+            error_message=error_message,
+            traceback_str=traceback_str,
+            network_logs=self.network_events,
+            console_logs=self.console_messages,
+            page_url=page_url,
+            dom_snippet=self.dom_snapshot or "",
+            element_candidates=self.element_candidates,
+            debug_logs=self.debug_logs,
+        )
+
         self.error_details = {
             "error_message": error_message,
             "traceback": traceback_str,
-            "classification": classification_data or classify_failure(error_message, traceback_str),
+            "classification": classification,
+            "alternative_selectors": classification.get("alternative_selectors", []),
+            "suggested_fix": classification.get("suggested_fix"),
+            "healing_context": classification.get("healing_context"),
         }
+        self.log_debug("ERROR", f"Test {self.test_name} failed: {error_message}")
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -261,6 +374,11 @@ class TestTelemetryLogger:
             "duration_ms": self.duration_ms,
             "started_at": self.started_at.isoformat(),
             "steps": self.steps,
+            "debug_logs": self.debug_logs,
+            "network_events": self.network_events,
+            "console_messages": self.console_messages,
+            "element_candidates": self.element_candidates,
+            "dom_snapshot": self.dom_snapshot,
             "error_details": self.error_details,
             "screenshot_path": self.screenshot_path,
         }

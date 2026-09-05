@@ -105,6 +105,26 @@ def generate_html_report(
                 </div>
                 """
 
+            suggested_fix = healing_context.get("suggested_fix") or ""
+            alt_selectors = healing_context.get("alternative_selectors") or []
+            cand_elements = healing_context.get("candidate_elements") or []
+
+            healer_box = ""
+            if suggested_fix or alt_selectors:
+                alt_badges = "".join([f'<code class="bg-white text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-200 text-[10px] font-mono">{sel}</code>' for sel in alt_selectors])
+                healer_box = f"""
+                <div class="p-3 bg-indigo-50/90 border border-indigo-200 rounded-lg text-xs space-y-1.5">
+                    <div class="font-bold text-indigo-950 flex items-center">
+                        <i class="fa-solid fa-wand-magic-sparkles text-indigo-600 mr-1.5"></i>Autonomous Healer Recommended Solution:
+                    </div>
+                    <p class="text-indigo-900 font-semibold text-[11px]">{suggested_fix}</p>
+                    {f'''<div class="mt-1 flex flex-wrap gap-1 items-center">
+                        <span class="text-[10px] text-indigo-700 font-semibold uppercase mr-1">Alternative Selectors:</span>
+                        {alt_badges}
+                    </div>''' if alt_selectors else ''}
+                </div>
+                """
+
             diag_markup = f"""
             <div class="mt-3 p-3 rounded-lg border {'border-rose-200 bg-rose-50/60' if class_type == 'APP_DEFECT' else 'border-amber-200 bg-amber-50/60'} text-xs space-y-2">
                 <div class="flex items-center justify-between">
@@ -113,18 +133,31 @@ def generate_html_report(
                 </div>
                 <p class="text-slate-700 leading-relaxed">{root_cause or err_msg}</p>
                 
-                {f'''<div class="p-2 bg-white rounded border border-slate-200">
-                    <span class="font-semibold text-indigo-700 block text-[11px]">Recommended Healer Action: <code class="font-mono">{healing_action}</code></span>
-                    <pre class="text-[10px] text-slate-600 mt-1 font-mono overflow-x-auto whitespace-pre-wrap">{json.dumps(healing_context, indent=2)}</pre>
-                </div>''' if healing_context else ''}
+                {healer_box}
 
                 <details class="cursor-pointer text-[11px] text-slate-500">
-                    <summary class="font-semibold hover:text-slate-800">View Stack Trace</summary>
+                    <summary class="font-semibold hover:text-slate-800">View Stack Trace & Healer Context</summary>
                     <pre class="mt-1 p-2 bg-slate-900 text-slate-200 rounded font-mono text-[10px] overflow-x-auto whitespace-pre-wrap">{traceback or err_msg}</pre>
+                    {f'''<pre class="mt-1 p-2 bg-slate-800 text-slate-300 rounded font-mono text-[10px] overflow-x-auto whitespace-pre-wrap">{json.dumps(healing_context, indent=2)}</pre>''' if healing_context else ''}
                 </details>
 
                 {screenshot_embed}
             </div>
+            """
+
+        debug_logs = t.get("debug_logs") or []
+        debug_markup = ""
+        if debug_logs:
+            log_rows = "".join([f'<div class="py-0.5"><span class="text-slate-500">[{l.get("timestamp")}]</span> <span class="{"text-amber-400" if l.get("level") == "WARN" else "text-rose-400" if l.get("level") == "ERROR" else "text-emerald-400"} font-bold">[{l.get("level")}]</span> {l.get("message")}</div>' for l in debug_logs])
+            debug_markup = f"""
+            <details class="mt-3 text-xs text-slate-500 cursor-pointer">
+                <summary class="font-semibold hover:text-slate-800 text-[11px] flex items-center">
+                    <i class="fa-solid fa-list-check mr-1.5 text-slate-400"></i>Diagnostic Debug Logs ({len(debug_logs)} events)
+                </summary>
+                <div class="mt-1.5 p-3 bg-slate-900 text-slate-200 rounded-lg font-mono text-[10px] max-h-48 overflow-y-auto space-y-0.5">
+                    {log_rows}
+                </div>
+            </details>
             """
 
         tests_html.append(f"""
@@ -141,6 +174,7 @@ def generate_html_report(
             </div>
             {steps_markup}
             {diag_markup}
+            {debug_markup}
         </div>
         """)
 

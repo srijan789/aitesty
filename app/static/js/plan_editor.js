@@ -362,3 +362,174 @@ function togglePlanView(viewName) {
 function escapeAttr(str) {
   return String(str).replace(/"/g, '&quot;');
 }
+
+function getSelectedScenarioIds() {
+  const checked = document.querySelectorAll('.scenario-select-chk:checked');
+  const ids = [];
+  checked.forEach(chk => {
+    const id = chk.getAttribute('data-scenario-id');
+    if (id) ids.push(id);
+  });
+  return ids;
+}
+
+function handleScenarioSelectionChange() {
+  const selectedIds = getSelectedScenarioIds();
+  const bar = document.getElementById('plan-bulk-actions-bar');
+  const countEl = document.getElementById('selected-scenarios-count');
+  const masterChk = document.getElementById('select-all-scenarios-chk');
+  const allCheckboxes = document.querySelectorAll('.scenario-select-chk');
+
+  if (countEl) {
+    countEl.textContent = `${selectedIds.length} scenario${selectedIds.length === 1 ? '' : 's'} selected`;
+  }
+
+  if (selectedIds.length > 0) {
+    if (bar) bar.classList.remove('hidden');
+  } else {
+    if (bar) bar.classList.add('hidden');
+  }
+
+  if (masterChk && allCheckboxes.length > 0) {
+    masterChk.checked = selectedIds.length === allCheckboxes.length;
+    masterChk.indeterminate = selectedIds.length > 0 && selectedIds.length < allCheckboxes.length;
+  }
+}
+
+function toggleSelectAllScenarios(masterCheckbox) {
+  const isChecked = masterCheckbox.checked;
+  const checkboxes = document.querySelectorAll('.scenario-select-chk');
+  checkboxes.forEach(chk => {
+    const card = chk.closest('.scenario-card');
+    if (card && card.style.display !== 'none') {
+      chk.checked = isChecked;
+    } else if (!isChecked) {
+      chk.checked = false;
+    }
+  });
+  handleScenarioSelectionChange();
+}
+
+function deselectAllScenarios() {
+  const masterChk = document.getElementById('select-all-scenarios-chk');
+  if (masterChk) {
+    masterChk.checked = false;
+    masterChk.indeterminate = false;
+  }
+  document.querySelectorAll('.scenario-select-chk').forEach(chk => {
+    chk.checked = false;
+  });
+  handleScenarioSelectionChange();
+}
+
+async function bulkMarkSelectedAutomation(projectId, targetStatus = 'marked_for_automation') {
+  const scenarioIds = getSelectedScenarioIds();
+  if (scenarioIds.length === 0) {
+    alert("Please select at least one scenario.");
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/projects/${projectId}/scenarios/bulk-mark-automation`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scenario_ids: scenarioIds, status: targetStatus })
+    });
+    const data = await res.json();
+    if (data.success) {
+      window.location.reload();
+    } else {
+      alert("Failed to update scenarios: " + (data.error || "Unknown error"));
+    }
+  } catch (err) {
+    alert("Network error: " + err.message);
+  }
+}
+
+async function triggerTestGenerationForSelected(projectId) {
+  const scenarioIds = getSelectedScenarioIds();
+  if (scenarioIds.length === 0) {
+    alert("Please select at least one scenario to generate tests for.");
+    return;
+  }
+
+  if (!confirm(`Generate Playwright test scripts for ${scenarioIds.length} selected scenario(s)?`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/projects/${projectId}/generate-tests`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scenario_ids: scenarioIds })
+    });
+    const data = await res.json();
+    if (data.success && data.run_id) {
+      window.location.href = `/projects/${projectId}/runs/${data.run_id}`;
+    } else {
+      alert("Failed to trigger test creation: " + (data.error || "Unknown error"));
+    }
+  } catch (err) {
+    alert("Network error: " + err.message);
+  }
+}
+
+async function bulkDeleteSelectedScenarios(projectId) {
+  const scenarioIds = getSelectedScenarioIds();
+  if (scenarioIds.length === 0) {
+    alert("Please select at least one scenario to delete.");
+    return;
+  }
+
+  if (!confirm(`Are you sure you want to permanently delete ${scenarioIds.length} selected scenario(s)?`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/projects/${projectId}/scenarios/bulk-delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scenario_ids: scenarioIds })
+    });
+    const data = await res.json();
+    if (data.success) {
+      scenarioIds.forEach(id => {
+        const card = document.querySelector(`.scenario-card[data-scenario-id="${id}"]`);
+        if (card) {
+          card.style.transition = 'all 0.25s ease-out';
+          card.style.opacity = '0';
+          card.style.transform = 'scale(0.95)';
+          setTimeout(() => {
+            const section = card.closest('.scenario-category-section');
+            card.remove();
+            if (section) {
+              const remaining = section.querySelectorAll('.scenario-card');
+              const catHeader = section.querySelector('h3');
+              if (catHeader) {
+                const catTitle = catHeader.textContent.split('(')[0].trim();
+                catHeader.textContent = `${catTitle} (${remaining.length})`;
+              }
+              if (remaining.length === 0) {
+                const emptyMsg = document.createElement('p');
+                emptyMsg.className = 'text-xs text-slate-400 italic bg-white p-4 rounded-xl border border-slate-200';
+                emptyMsg.textContent = 'No scenarios remaining in this category.';
+                section.appendChild(emptyMsg);
+              }
+            }
+            const totalScenariosEl = document.getElementById('total-scenarios-count');
+            if (totalScenariosEl) {
+              const currentTotal = document.querySelectorAll('.scenario-card').length;
+              totalScenariosEl.textContent = `${currentTotal} Total Scenarios`;
+            }
+            updateMarkedCounter();
+          }, 250);
+        }
+      });
+      deselectAllScenarios();
+    } else {
+      alert("Failed to delete scenarios: " + (data.error || "Unknown error"));
+    }
+  } catch (err) {
+    alert("Network error: " + err.message);
+  }
+}

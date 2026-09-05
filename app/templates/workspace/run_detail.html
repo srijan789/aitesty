@@ -87,18 +87,25 @@
         {% if run.run_type == 'exploration' %}
           Scenarios Synthesized
         {% elif run.run_type == 'test_generation' %}
-          Scenarios Automated
+          Subtests Generated
         {% else %}
-          Tests Passed
+          Subtests Executed
         {% endif %}
       </div>
-      <div id="stat-primary" class="text-base font-bold text-emerald-600 mt-1">
+      <div id="stat-primary" class="text-base font-bold text-indigo-600 mt-1">
         {% if run.run_type == 'exploration' %}
           {{ stats.get('total_scenarios', '--') }}
         {% elif run.run_type == 'test_generation' %}
-          {{ stats.get('scenarios_automated', '--') }}
+          {{ stats.get('subtests_created', (stats.get('files_created', 0) * 3)) }}
         {% else %}
-          {{ stats.get('passed', 0) }} / {{ stats.get('total', 0) }}
+          {{ stats.get('subtests_total', stats.get('total', 0)) }}
+        {% endif %}
+      </div>
+      <div class="text-[11px] text-slate-400 mt-0.5">
+        {% if run.run_type == 'test_execution' %}
+          <span class="text-emerald-600 font-medium">{{ stats.get('passed', 0) }} passed</span>, <span class="text-rose-600 font-medium">{{ stats.get('failed', 0) }} failed</span>
+        {% elif run.run_type == 'test_generation' %}
+          {{ stats.get('scenarios_automated', 0) }} scenario(s)
         {% endif %}
       </div>
     </div>
@@ -109,7 +116,7 @@
         {% elif run.run_type == 'test_generation' %}
           Spec Files Created
         {% else %}
-          Bugs vs Auto Failures
+          Spec Files Executed
         {% endif %}
       </div>
       <div id="stat-secondary" class="text-base font-bold text-slate-800 mt-1">
@@ -118,6 +125,11 @@
         {% elif run.run_type == 'test_generation' %}
           {{ stats.get('files_created', '--') }}
         {% else %}
+          {{ stats.get('tests_count', stats.get('subtests_per_test')|length or '--') }}
+        {% endif %}
+      </div>
+      <div class="text-[11px] text-slate-400 mt-0.5">
+        {% if run.run_type == 'test_execution' %}
           <span class="text-rose-600 font-bold">{{ stats.get('app_defects', 0) }} bugs</span>,
           <span class="text-amber-600 font-bold">{{ stats.get('automation_failures', 0) }} script</span>
         {% endif %}
@@ -130,6 +142,50 @@
       </div>
     </div>
   </div>
+
+  <!-- Subtests Breakdown per Test Specification -->
+  {% if stats.get('subtests_per_test') %}
+    <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
+      <div class="flex items-center justify-between">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center">
+          <i class="fa-solid fa-flask-vial mr-2 text-indigo-600"></i>Subtests per Test Specification
+        </h3>
+        <span class="text-xs text-slate-500 font-medium">
+          {{ stats.get('subtests_per_test')|length }} Spec File(s) &bull; {{ stats.get('subtests_total', stats.get('subtests_created', 0)) }} Total Subtests
+        </span>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {% for item in stats.get('subtests_per_test') %}
+          <div class="bg-slate-50 rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between space-y-2">
+            <div class="flex items-start justify-between gap-2">
+              <div class="truncate">
+                <div class="font-mono text-xs font-bold text-slate-800 truncate" title="{{ item.file_name or item.file }}">
+                  {{ item.file_name or item.file }}
+                </div>
+              </div>
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-700 border border-indigo-200 shrink-0">
+                {{ item.subtests_total or item.subtests_count }} subtest{{ 's' if (item.subtests_total or item.subtests_count) != 1 else '' }}
+              </span>
+            </div>
+            {% if item.subtests %}
+              <div class="space-y-1 pt-1.5 border-t border-slate-200/70">
+                {% for sub in item.subtests %}
+                  <div class="flex items-center justify-between text-[11px]">
+                    <span class="text-slate-600 font-mono text-[10px] truncate max-w-[200px]" title="{{ sub.test_name }}">{{ sub.title or sub.test_name }}</span>
+                    {% if sub.status == 'passed' %}
+                      <span class="text-emerald-600 font-semibold text-[10px] flex items-center"><i class="fa-solid fa-check mr-1"></i>Passed</span>
+                    {% else %}
+                      <span class="text-rose-600 font-semibold text-[10px] flex items-center"><i class="fa-solid fa-xmark mr-1"></i>Failed</span>
+                    {% endif %}
+                  </div>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
 
 
   <!-- Live Terminal Console -->

@@ -243,3 +243,74 @@ def test_delete_scenario_and_delete_test_file(client, app):
         assert updated_tc1.status == "marked_for_automation"
 
 
+def test_bulk_delete_scenarios_and_files(client, app):
+    with app.app_context():
+        p = Project(name="Bulk Project", target_url="http://example.com", auth_type="none")
+        db.session.add(p)
+        db.session.commit()
+        project_id = p.id
+
+        plan = TestPlan(project_id=project_id, version=1, status="active")
+        db.session.add(plan)
+        db.session.flush()
+
+        tc1 = TestCase(test_plan_id=plan.id, title="Scenario 1", category="happy_path", status="pending_review")
+        tc2 = TestCase(test_plan_id=plan.id, title="Scenario 2", category="edge_case", status="pending_review")
+        tc3 = TestCase(test_plan_id=plan.id, title="Scenario 3", category="error_flow", status="pending_review")
+        db.session.add_all([tc1, tc2, tc3])
+        db.session.commit()
+        tc1_id = tc1.id
+        tc2_id = tc2.id
+        tc3_id = tc3.id
+
+    from app.core.workspace import WorkspaceManager
+    wm = WorkspaceManager(Path(app.config["WORKSPACES_ROOT"]))
+    wm.save_test_file(project_id, "tests/test_file1.spec.py", "def test_1(): pass")
+    wm.save_test_file(project_id, "tests/test_file2.spec.py", "def test_2(): pass")
+
+    # 1. Bulk delete scenarios (tc2 and tc3)
+    res_sc = client.post(
+        f"/api/projects/{project_id}/scenarios/bulk-delete",
+        json={"scenario_ids": [tc2_id, tc3_id]}
+    )
+    assert res_sc.status_code == 200
+    data_sc = res_sc.get_json()
+    assert data_sc["success"] is True
+    assert data_sc["deleted_count"] == 2
+    assert data_sc["remaining_scenarios_count"] == 1
+
+    with app.app_context():
+        assert db.session.get(TestCase, tc1_id) is not None
+        assert db.session.get(TestCase, tc2_id) is None
+        assert db.session.get(TestCase, tc3_id) is None
+
+    # 2. Bulk delete test files
+    res_f = client.post(
+        f"/api/projects/{project_id}/files/bulk-delete",
+        json={"paths": ["tests/test_file1.spec.py", "tests/test_file2.spec.py"]}
+    )
+    assert res_f.status_code == 200
+    data_f = res_f.get_json()
+    assert data_f["success"] is True
+    assert data_f["deleted_count"] == 2
+
+    # Verify files deleted on disk
+    ws_tests = Path(app.config["WORKSPACES_ROOT"]) / project_id / "tests"
+    assert not (ws_tests / "test_file1.spec.py").exists()
+    assert not (ws_tests / "test_file2.spec.py").exists()
+
+    # 3. Targeted test execution with target_files and test_names
+    res_exec = client.post(
+        f"/api/projects/{project_id}/execute-tests",
+        json={
+            "target_files": ["tests/test_a.spec.py", "tests/test_b.spec.py"],
+            "test_names": ["test_01_navigate", "test_02_interaction"]
+        }
+    )
+    assert res_exec.status_code == 202
+    data_exec = res_exec.get_json()
+    assert data_exec["success"] is True
+    assert data_exec["target_files"] == ["tests/test_a.spec.py", "tests/test_b.spec.py"]
+    assert data_exec["target_tests"] == ["test_01_navigate", "test_02_interaction"]
+
+

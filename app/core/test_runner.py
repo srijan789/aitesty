@@ -37,10 +37,26 @@ class TestRunner:
         self.screenshots_dir = self.runs_dir / "screenshots"
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
 
-    def discover_test_files(self, target_file: Optional[str] = None) -> List[Path]:
-        """Finds spec files to run, either all or specific target file."""
+    def discover_test_files(
+        self,
+        target_file: Optional[str] = None,
+        target_files: Optional[List[str]] = None,
+    ) -> List[Path]:
+        """Finds spec files to run, either all, specific target file, or a list of target files."""
         if not self.tests_dir.exists():
             return []
+
+        if target_files:
+            found = []
+            for tf in target_files:
+                safe_rel = tf.lstrip("/").replace("../", "")
+                p1 = self.workspace_dir / safe_rel
+                p2 = self.tests_dir / Path(tf).name
+                if p1.exists() and p1.is_file():
+                    found.append(p1)
+                elif p2.exists() and p2.is_file():
+                    found.append(p2)
+            return sorted(list(set(found)))
 
         if target_file:
             safe_rel = target_file.lstrip("/").replace("../", "")
@@ -98,20 +114,22 @@ class TestRunner:
         self,
         target_file: Optional[str] = None,
         target_test_name: Optional[str] = None,
+        target_files: Optional[List[str]] = None,
+        target_test_names: Optional[List[str]] = None,
         log_callback: Optional[Callable[[str, str, Optional[Dict[str, Any]]], None]] = None,
         cancel_check: Optional[Callable[[], bool]] = None,
     ) -> Dict[str, Any]:
         """
-        Executes test suite or individual test with real-time log streaming,
+        Executes test suite or selected tests with real-time log streaming,
         target connectivity check, failure classification, and HTML report compilation.
         """
         start_time = datetime.utcnow()
         cb = log_callback or (lambda lvl, msg, meta=None: None)
         cb("INFO", f"Initializing Test Runner execution for project {self.project_id}")
 
-        files_to_run = self.discover_test_files(target_file)
+        files_to_run = self.discover_test_files(target_file=target_file, target_files=target_files)
         if not files_to_run:
-            cb("WARN", f"No test specification files found in {self.tests_dir}.")
+            cb("WARN", f"No test specification files found matching target criteria.")
             empty_summary = {
                 "total": 0, "passed": 0, "failed": 0, "skipped": 0,
                 "duration_ms": 0, "app_defects": 0, "automation_failures": 0,
@@ -170,6 +188,8 @@ class TestRunner:
                 t_name = t_info["name"]
                 if target_test_name and target_test_name not in t_name:
                     continue
+                if target_test_names and not any(tt in t_name for tt in target_test_names):
+                    continue
 
                 if cancel_check and cancel_check():
                     cb("WARN", "Test run cancelled by user request.")
@@ -204,17 +224,41 @@ class TestRunner:
                     else:
                         cb("ERROR", f"  ✖ {t_name}: FAILED - {err_info.get('error_message')}")
 
+        tests_breakdown = {}
+        for res in all_results:
+            fname = res.get("file_name") or "test_suite.spec.py"
+            if fname not in tests_breakdown:
+                tests_breakdown[fname] = {
+                    "file_name": fname,
+                    "subtests_total": 0,
+                    "passed": 0,
+                    "failed": 0,
+                    "subtests": [],
+                }
+            tests_breakdown[fname]["subtests_total"] += 1
+            if res.get("status") == "passed":
+                tests_breakdown[fname]["passed"] += 1
+            else:
+                tests_breakdown[fname]["failed"] += 1
+            tests_breakdown[fname]["subtests"].append({
+                "test_name": res.get("test_name"),
+                "title": res.get("title") or res.get("subtest_title"),
+                "status": res.get("status"),
+            })
+
         total_duration_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
         summary = {
             "total": len(all_results),
             "subtests_total": len(all_results),
             "scenarios_count": len(discovered_scenarios),
+            "tests_count": len(tests_breakdown),
             "passed": passed_count,
             "failed": failed_count,
             "skipped": 0,
             "duration_ms": total_duration_ms,
             "app_defects": app_defects_count,
             "automation_failures": auto_failures_count,
+            "subtests_per_test": list(tests_breakdown.values()),
         }
 
         full_results = {
@@ -273,7 +317,13 @@ class TestRunner:
                 screenshot_path=None,
                 classification_data=classification,
             )
-            return telemetry.to_dict()
+            out = telemetry.to_dict()
+            out["file_name"] = file_path.name
+            out["file_path"] = str(file_path)
+            out["title"] = test_info.get("title") or test_name
+            out["scenario_title"] = test_info.get("scenario_title")
+            out["category"] = test_info.get("category", "functional")
+            return out
 
         # 2. Server is online: Execute real Playwright browser test or real HTTP probe
         try:
@@ -306,6 +356,11 @@ class TestRunner:
                     page = context.new_page()
                     page.set_default_timeout(8000)
 
+                    # Diagnostic Listeners for Results Analysis & Healer Agent
+                    page.on("console", lambda msg: telemetry.log_console(msg.type, msg.text, str(msg.location)))
+                    page.on("pageerror", lambda err: telemetry.log_console("error", f"Uncaught page exception: {err}"))
+                    page.on("response", lambda res: telemetry.log_network(res.request.method, res.url, res.status))
+
                     # Step 1: Navigate to target URL
                     t0 = time.time()
                     res = page.goto(self.target_url, wait_until="domcontentloaded", timeout=7000)
@@ -324,6 +379,25 @@ class TestRunner:
                     telemetry.log_step(2, "Assert", "body", f"DOM rendered ({page.title()})", body_dur)
                     log_callback("INFO", f"    [Step 2] Assert -> body visible, Title: '{page.title()}'")
 
+                    # Scan interactive DOM elements for healer context
+                    try:
+                        candidates = page.evaluate("""() => {
+                            const els = Array.from(document.querySelectorAll('button, input, a, [role="button"], select, textarea'));
+                            return els.slice(0, 25).map(el => ({
+                                tag: el.tagName.toLowerCase(),
+                                id: el.id || '',
+                                name: el.getAttribute('name') || '',
+                                text: (el.innerText || el.textContent || el.value || '').trim().slice(0, 50),
+                                role: el.getAttribute('role') || '',
+                                type: el.getAttribute('type') || '',
+                                testid: el.getAttribute('data-testid') || el.getAttribute('data-test') || '',
+                            }));
+                        }""")
+                        telemetry.set_dom_context(page.content()[:2000], candidates)
+                        telemetry.log_debug("DEBUG", f"Scanned live DOM: {len(candidates)} candidate elements indexed.")
+                    except Exception:
+                        pass
+
                     browser.close()
                     browser_executed = True
             except Exception as browser_err:
@@ -334,13 +408,14 @@ class TestRunner:
                 
                 # If Playwright browser launch is blocked by OS environment permissions (macOS Mach port sandbox):
                 # Fall back to live HTTP verification so real network checks still run and verify target app!
-                logger.info(f"Browser launch unavailable in environment ({browser_err}). Falling back to live HTTP verification.")
-
             if not browser_executed:
                 # Real HTTP validation against target server
                 t0 = time.time()
                 resp = requests.get(self.target_url, timeout=5, allow_redirects=True)
                 dur = int((time.time() - t0) * 1000)
+                resp_preview = resp.text[:200] if hasattr(resp, "text") and isinstance(resp.text, str) else ""
+                telemetry.log_network("GET", self.target_url, getattr(resp, "status_code", 200), dur, resp_preview)
+
                 if resp.status_code >= 400:
                     raise AssertionError(f"Target URL {self.target_url} returned HTTP {resp.status_code}")
 
@@ -361,25 +436,26 @@ class TestRunner:
         except Exception as exc:
             tb = traceback.format_exc()
             screenshot_path = str(self.screenshots_dir / f"{test_name}_failure.png")
-            classification = classify_failure(
-                error_message=str(exc),
-                traceback_str=tb,
-                page_url=self.target_url,
-            )
             telemetry.mark_failed(
                 error_message=str(exc),
                 traceback_str=tb,
                 screenshot_path=screenshot_path if os.path.exists(screenshot_path) else None,
-                classification_data=classification,
+                page_url=self.target_url,
             )
 
-        return telemetry.to_dict()
+        out = telemetry.to_dict()
+        out["file_name"] = file_path.name
+        out["file_path"] = str(file_path)
+        out["title"] = test_info.get("title") or test_name
+        out["scenario_title"] = test_info.get("scenario_title")
+        out["category"] = test_info.get("category", "functional")
+        return out
 
     def _save_reports(self, full_results: Dict[str, Any], log_callback: Callable):
         """Saves results.json and report.html to runs/<run_id>/"""
         json_path = self.runs_dir / "results.json"
         with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(full_results, f, indent=2)
+            json.dump(full_results, f, indent=2, default=str)
 
         raw_logs = ""
         log_file = self.runs_dir / "execution.log"

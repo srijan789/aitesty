@@ -47,6 +47,10 @@
                     <span class="inline-flex items-center text-indigo-700 font-medium">
                       <i class="fa-solid fa-compass mr-1.5 text-indigo-500"></i>Exploration
                     </span>
+                  {% elif r.run_type == 'test_generation' %}
+                    <span class="inline-flex items-center text-teal-700 font-medium">
+                      <i class="fa-solid fa-wand-magic-sparkles mr-1.5 text-teal-500"></i>Test Creation
+                    </span>
                   {% else %}
                     <span class="inline-flex items-center text-emerald-700 font-medium">
                       <i class="fa-solid fa-vial-circle-check mr-1.5 text-emerald-500"></i>Test Suite
@@ -74,10 +78,45 @@
                 </td>
                 <td class="px-6 py-4 text-slate-600">
                   {% if r.run_type == 'exploration' and stats.get('total_scenarios') is not none %}
-                    <span class="font-medium text-slate-800">{{ stats.get('total_scenarios') }}</span> scenarios synthesized
-                  {% elif r.run_type == 'test_execution' and stats.get('total') is not none %}
-                    <span class="text-emerald-600 font-medium">{{ stats.get('passed', 0) }} passed</span>,
-                    <span class="text-rose-600 font-medium">{{ stats.get('failed', 0) }} failed</span>
+                    <span class="font-bold text-slate-800">{{ stats.get('total_scenarios') }}</span> scenarios synthesized
+                  {% elif r.run_type == 'test_generation' %}
+                    <div class="space-y-1">
+                      <div class="flex items-center space-x-1.5">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+                          <i class="fa-solid fa-wand-magic-sparkles mr-1 text-[9px]"></i>{{ stats.get('subtests_created', (stats.get('files_created', 0) * 3)) }} Subtests
+                        </span>
+                        <span class="text-xs text-slate-500 font-medium">in {{ stats.get('files_created', 0) }} spec(s)</span>
+                      </div>
+                      {% if stats.get('subtests_per_test') %}
+                        <div class="flex flex-wrap gap-1">
+                          {% for item in stats.get('subtests_per_test') %}
+                            <span class="inline-flex items-center text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200" title="{{ item.file_name or item.file }}: {{ item.subtests_count or item.subtests_total }} subtests">
+                              {{ item.file_name or item.file }}: <strong class="ml-1 text-teal-700">{{ item.subtests_count or item.subtests_total }}</strong>
+                            </span>
+                          {% endfor %}
+                        </div>
+                      {% endif %}
+                    </div>
+                  {% elif r.run_type == 'test_execution' and (stats.get('total') is not none or stats.get('subtests_total') is not none) %}
+                    <div class="space-y-1">
+                      <div class="flex items-center space-x-1.5">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          <i class="fa-solid fa-flask-vial mr-1 text-[9px]"></i>{{ stats.get('subtests_total', stats.get('total', 0)) }} Subtests
+                        </span>
+                        <span class="text-[11px] text-slate-500 font-medium">
+                          (<span class="text-emerald-600 font-semibold">{{ stats.get('passed', 0) }} passed</span>{% if stats.get('failed', 0) > 0 %}, <span class="text-rose-600 font-semibold">{{ stats.get('failed', 0) }} failed</span>{% endif %})
+                        </span>
+                      </div>
+                      {% if stats.get('subtests_per_test') %}
+                        <div class="flex flex-wrap gap-1">
+                          {% for item in stats.get('subtests_per_test') %}
+                            <span class="inline-flex items-center text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200" title="{{ item.file_name or item.file }}: {{ item.subtests_total or item.subtests_count }} subtests ({{ item.passed }} passed, {{ item.failed }} failed)">
+                              {{ item.file_name or item.file }}: <strong class="ml-1 text-indigo-700">{{ item.subtests_total or item.subtests_count }}</strong>
+                            </span>
+                          {% endfor %}
+                        </div>
+                      {% endif %}
+                    </div>
                   {% else %}
                     <span class="text-slate-400">--</span>
                   {% endif %}

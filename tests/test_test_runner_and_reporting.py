@@ -234,3 +234,101 @@ def test_api_generate_and_execute_tests(client, app):
     res_raw_logs = client.get(f"/api/runs/{exec_run_id}/logs/raw")
     assert res_raw_logs.status_code == 200
     assert isinstance(res_raw_logs.data.decode("utf-8"), str)
+
+
+def test_telemetry_diagnostic_logs_and_healing_context():
+    from app.core.telemetry import TestTelemetryLogger
+    logger = TestTelemetryLogger(test_name="test_login_subtest")
+    logger.log_debug("DEBUG", "Connecting to Playwright Chromium instance")
+    logger.log_console("info", "Form rendered onto viewport", "bundle.js:42")
+    logger.log_network("POST", "http://example.com/api/login", 200, 120)
+    
+    candidates = [
+        {"tag": "button", "id": "btn-login", "name": "loginBtn", "text": "Sign In", "role": "button", "type": "submit", "testid": "login-button"},
+        {"tag": "input", "id": "username-input", "name": "user", "text": "", "role": "", "type": "text", "testid": "username-field"},
+    ]
+    logger.set_dom_context("<html><body><button id='btn-login'>Sign In</button></body></html>", candidates)
+
+    err = "playwright._impl._errors.TimeoutError: Page.click: Timeout 5000ms exceeded waiting for locator('#submit-btn')"
+    tb = "Traceback ... Page.click: Timeout 5000ms exceeded."
+    logger.mark_failed(err, tb, page_url="http://example.com/login")
+
+    data = logger.to_dict()
+    assert data["status"] == "failed"
+    assert len(data["debug_logs"]) >= 1
+    assert len(data["console_messages"]) == 1
+    assert len(data["network_events"]) == 1
+    assert len(data["element_candidates"]) == 2
+
+    # Verify healing context and alternative selectors
+    err_det = data["error_details"]
+    assert err_det["classification"]["classification"] == FailureClassification.AUTOMATION_FAILURE
+    assert len(err_det["alternative_selectors"]) > 0
+    assert "[data-testid='login-button']" in err_det["alternative_selectors"]
+    assert err_det["suggested_fix"] is not None
+    assert err_det["healing_context"] is not None
+    assert err_det["healing_context"]["matched_element"]["id"] == "btn-login"
+
+
+def test_runner_targeted_files_and_test_names(tmp_path):
+    from unittest.mock import patch, MagicMock
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir(parents=True, exist_ok=True)
+
+    spec1 = tests_dir / "test_auth.spec.py"
+    spec1.write_text("""
+def test_01_navigate_auth(page):
+    \"\"\"
+    Subtest: Navigate to Auth
+    Scenario ID: sc-auth
+    \"\"\"
+    print("[STEP 1] Navigate to http://example.com/auth")
+
+def test_02_submit_auth(page):
+    \"\"\"
+    Subtest: Submit Auth
+    Scenario ID: sc-auth
+    \"\"\"
+    print("[STEP 1] Submit credentials")
+""", encoding="utf-8")
+
+    spec2 = tests_dir / "test_cart.spec.py"
+    spec2.write_text("""
+def test_01_view_cart(page):
+    \"\"\"
+    Subtest: View Cart
+    Scenario ID: sc-cart
+    \"\"\"
+    print("[STEP 1] Navigate to http://example.com/cart")
+""", encoding="utf-8")
+
+    runner = TestRunner(
+        workspace_dir=str(tmp_path),
+        project_id="proj-targeted",
+        run_id="run-targeted-1",
+        target_url="http://example.com",
+    )
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.text = "OK"
+
+    with patch("requests.get", return_value=mock_resp):
+        # 1. Target single test function across files
+        res1 = runner.execute(target_test_names=["test_01_navigate_auth"])
+        assert res1["summary"]["total"] == 1
+        assert res1["tests"][0]["test_name"] == "test_01_navigate_auth"
+
+        # 2. Target specific file only
+        res2 = runner.execute(target_files=["tests/test_cart.spec.py"])
+        assert res2["summary"]["total"] == 1
+        assert res2["tests"][0]["test_name"] == "test_01_view_cart"
+
+        # 3. Target multiple specific files
+        res3 = runner.execute(target_files=["tests/test_auth.spec.py", "tests/test_cart.spec.py"])
+        assert res3["summary"]["total"] == 3
+        assert "subtests_per_test" in res3["summary"]
+        assert len(res3["summary"]["subtests_per_test"]) == 2
+        breakdown = {item["file_name"]: item["subtests_total"] for item in res3["summary"]["subtests_per_test"]}
+        assert breakdown["test_auth.spec.py"] == 2
+        assert breakdown["test_cart.spec.py"] == 1

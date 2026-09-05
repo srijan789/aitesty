@@ -333,15 +333,26 @@ class TestOrchestrator:
         # Update test_plan.json on disk
         wm.save_test_plan(project.id, active_plan.to_dict())
 
+        total_subtests = sum(getattr(f, "subtest_count", getattr(f, "test_count", 1)) for f in gen_result.generated_files)
         stats = {
             "scenarios_automated": len(target_list),
             "files_created": len(gen_result.generated_files),
+            "subtests_created": total_subtests,
+            "subtests_per_test": [
+                {
+                    "file_name": f.filename,
+                    "relative_path": f.relative_path,
+                    "subtests_count": getattr(f, "subtest_count", getattr(f, "test_count", 1)),
+                    "subtests_total": getattr(f, "subtest_count", getattr(f, "test_count", 1)),
+                }
+                for f in gen_result.generated_files
+            ],
         }
         run.set_summary_stats(stats)
         run.status = "completed"
         db.session.commit()
 
-        log_callback("INFO", f"Test Creation complete! Automated {len(target_list)} scenario(s) across {len(gen_result.generated_files)} spec file(s).", stats)
+        log_callback("INFO", f"Test Creation complete! Automated {len(target_list)} scenario(s) ({total_subtests} subtests) across {len(gen_result.generated_files)} spec file(s).", stats)
 
     @classmethod
     def trigger_test_execution(
@@ -349,11 +360,13 @@ class TestOrchestrator:
         project_id: str,
         target_file: Optional[str] = None,
         scenario_id: Optional[str] = None,
+        target_files: Optional[List[str]] = None,
+        target_tests: Optional[List[str]] = None,
         trigger_source: str = "manual"
     ) -> TestRun:
         """
         Triggers execution of either all test specs in the repository (suite run),
-        or a specific spec file / individual test.
+        a specific spec file / individual test, or a multi-selection of files/tests.
         """
         project = db.get_or_404(Project, project_id)
         wm = cls.get_workspace_manager()
@@ -378,6 +391,8 @@ class TestOrchestrator:
             project_id=project.id,
             target_file=target_file,
             scenario_id=scenario_id,
+            target_files=target_files,
+            target_tests=target_tests,
         )
         return run
 
@@ -389,6 +404,8 @@ class TestOrchestrator:
         project_id: str,
         target_file: Optional[str] = None,
         scenario_id: Optional[str] = None,
+        target_files: Optional[List[str]] = None,
+        target_tests: Optional[List[str]] = None,
     ):
         from app.core.test_runner import TestRunner
 
@@ -423,6 +440,8 @@ class TestOrchestrator:
         results = runner.execute(
             target_file=target_file,
             target_test_name=scenario_id,
+            target_files=target_files,
+            target_test_names=target_tests,
             log_callback=log_callback,
             cancel_check=cancel_event.is_set,
         )

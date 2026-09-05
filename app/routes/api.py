@@ -51,10 +51,14 @@ def trigger_test_execution(project_id):
         data = request.get_json(silent=True) or {}
         target_file = data.get("target_file")
         scenario_id = data.get("scenario_id")
+        target_files = data.get("target_files")
+        target_tests = data.get("target_tests") or data.get("test_names")
         run = TestOrchestrator.trigger_test_execution(
             project_id=project_id,
             target_file=target_file,
             scenario_id=scenario_id,
+            target_files=target_files,
+            target_tests=target_tests,
             trigger_source="api",
         )
         return jsonify({
@@ -62,6 +66,8 @@ def trigger_test_execution(project_id):
             "run_id": run.id,
             "status": run.status,
             "target_file": target_file,
+            "target_files": target_files,
+            "target_tests": target_tests,
             "message": "Test execution queued.",
         }), 202
     except Exception as e:
@@ -256,6 +262,37 @@ def delete_scenario(project_id, scenario_id):
         "remaining_scenarios_count": len(active_plan.test_cases),
     })
 
+@api_bp.route("/projects/<project_id>/scenarios/bulk-delete", methods=["POST"])
+def bulk_delete_scenarios(project_id):
+    project = db.get_or_404(Project, project_id)
+    active_plan = TestPlan.query.filter_by(project_id=project.id, status="active").first_or_404()
+
+    payload = request.get_json(silent=True) or {}
+    scenario_ids = payload.get("scenario_ids", [])
+    if not scenario_ids or not isinstance(scenario_ids, list):
+        return jsonify({"error": "scenario_ids list is required"}), 400
+
+    test_cases = TestCase.query.filter(
+        TestCase.test_plan_id == active_plan.id,
+        TestCase.id.in_(scenario_ids)
+    ).all()
+
+    deleted_count = len(test_cases)
+    for tc in test_cases:
+        db.session.delete(tc)
+    db.session.commit()
+
+    # Re-sync updated test plan to workspace files
+    wm = get_wm()
+    wm.save_test_plan(project.id, active_plan.to_dict())
+
+    return jsonify({
+        "success": True,
+        "deleted_count": deleted_count,
+        "message": f"Successfully deleted {deleted_count} scenarios.",
+        "remaining_scenarios_count": len(active_plan.test_cases),
+    })
+
 
 @api_bp.route("/projects/<project_id>/files", methods=["GET"])
 def list_files(project_id):
@@ -325,6 +362,47 @@ def delete_file(project_id):
         return jsonify({"success": True, "message": f"Successfully deleted '{safe_rel}'."})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@api_bp.route("/projects/<project_id>/files/bulk-delete", methods=["POST"])
+def bulk_delete_files(project_id):
+    project = db.get_or_404(Project, project_id)
+    payload = request.get_json(silent=True) or {}
+    paths = payload.get("paths") or payload.get("files") or []
+    if not paths or not isinstance(paths, list):
+        return jsonify({"error": "paths list is required"}), 400
+
+    wm = get_wm()
+    deleted_paths = []
+    active_plan = TestPlan.query.filter_by(project_id=project.id, status="active").first()
+    plan_updated = False
+
+    for file_path in paths:
+        safe_rel = str(file_path).lstrip("/").replace("../", "")
+        if not safe_rel.startswith("tests/"):
+            continue
+        try:
+            if wm.delete_test_file(project.id, safe_rel):
+                deleted_paths.append(safe_rel)
+                if active_plan:
+                    linked_cases = TestCase.query.filter_by(test_plan_id=active_plan.id, script_path=safe_rel).all()
+                    for tc in linked_cases:
+                        tc.script_path = None
+                        if tc.status == "automated":
+                            tc.status = "marked_for_automation"
+                        plan_updated = True
+        except Exception:
+            continue
+
+    if plan_updated:
+        db.session.commit()
+        wm.save_test_plan(project.id, active_plan.to_dict())
+
+    return jsonify({
+        "success": True,
+        "deleted_count": len(deleted_paths),
+        "deleted_paths": deleted_paths,
+        "message": f"Successfully deleted {len(deleted_paths)} test files.",
+    })
 
 @api_bp.route("/runs/<run_id>/report", methods=["GET"])
 def get_run_report(run_id):
