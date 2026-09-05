@@ -158,9 +158,106 @@ class PlaywrightController:
         self.page.fill(selector, value, timeout=5000)
         return {"success": True, "action": "fill", "selector": selector}
 
+    def select_option(self, selector: str, value: str) -> Dict[str, Any]:
+        """Selects an option from a <select> dropdown."""
+        if not self.page:
+            raise RuntimeError("Browser not started")
+        try:
+            self.page.select_option(selector, value=value, timeout=5000)
+            self.page.wait_for_timeout(300)
+            return {"success": True, "action": "select", "selector": selector, "value": value}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def scroll(self, direction: str = "down", amount: int = 600) -> Dict[str, Any]:
+        """Scrolls the page to reveal lazy-loaded elements or footer navigation."""
+        if not self.page:
+            raise RuntimeError("Browser not started")
+        delta = amount if direction.lower() == "down" else -amount
+        self.page.evaluate(f"window.scrollBy(0, {delta});")
+        self.page.wait_for_timeout(400)
+        return {"success": True, "action": "scroll", "direction": direction, "amount": amount}
+
     def wait(self, milliseconds: int = 500):
         if self.page:
             self.page.wait_for_timeout(milliseconds)
+
+    def extract_crawl_targets(self, allowed_domain: Optional[str] = None) -> List[Dict[str, str]]:
+        """
+        Extracts all clean, same-origin, navigable URLs from the active page.
+        Resolves relative URLs, strips hash fragments, and filters out non-navigable
+        links (downloads, media, auth logout triggers, mailto).
+        """
+        if not self.page:
+            return []
+
+        script = """(allowedHost) => {
+            const currentOrigin = window.location.origin;
+            const currentHost = allowedHost || window.location.hostname;
+            const skipExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.pdf', '.zip', '.tar', '.gz', '.css', '.js', '.woff', '.woff2', '.mp4'];
+            const dangerousKeywords = ['logout', 'signout', 'delete-account', 'delete_account', 'reset-password'];
+
+            const links = Array.from(document.querySelectorAll('a[href]'));
+            const results = [];
+            const seen = new Set();
+
+            for (const a of links) {
+                let href = a.getAttribute('href');
+                if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) {
+                    continue;
+                }
+
+                let fullUrl;
+                try {
+                    fullUrl = new URL(href, window.location.href);
+                } catch (e) {
+                    continue;
+                }
+
+                // Check host / domain
+                if (fullUrl.hostname !== currentHost && !fullUrl.hostname.endsWith('.' + currentHost)) {
+                    continue;
+                }
+
+                // Remove hash fragment and search params that are volatile
+                fullUrl.hash = '';
+                const cleanUrl = fullUrl.href;
+
+                // Check skip extensions
+                const pathname = fullUrl.pathname.toLowerCase();
+                if (skipExtensions.some(ext => pathname.endsWith(ext))) {
+                    continue;
+                }
+
+                // Check dangerous keywords
+                if (dangerousKeywords.some(kw => pathname.includes(kw))) {
+                    continue;
+                }
+
+                if (seen.has(cleanUrl)) {
+                    continue;
+                }
+                seen.add(cleanUrl);
+
+                const text = (a.innerText || a.getAttribute('aria-label') || a.getAttribute('title') || '').trim().substring(0, 50);
+                const isNav = Boolean(a.closest('nav, header, [role="navigation"], .navbar, .menu, .sidebar'));
+
+                results.push({
+                    url: cleanUrl,
+                    path: fullUrl.pathname,
+                    text: text || fullUrl.pathname,
+                    is_nav: isNav
+                });
+            }
+            return results;
+        }"""
+        try:
+            domain_arg = allowed_domain or ""
+            targets = self.page.evaluate(script, domain_arg)
+            return targets if isinstance(targets, list) else []
+        except Exception as e:
+            logger.warning(f"Error extracting crawl targets: {e}")
+            return []
 
     def take_screenshot(self, save_path: str) -> str:
         """Captures viewport screenshot and saves to save_path."""
@@ -226,12 +323,23 @@ class PlaywrightController:
                 .filter(isVisible)
                 .map(el => el.innerText.trim());
 
+            const forms = Array.from(document.querySelectorAll('form'))
+                .filter(isVisible)
+                .slice(0, 5)
+                .map(f => ({
+                    id: f.id || '',
+                    action: f.getAttribute('action') || '',
+                    method: (f.getAttribute('method') || 'GET').toUpperCase(),
+                    inputCount: f.querySelectorAll('input, select, textarea').length
+                }));
+
             return {
                 headings,
                 inputs,
                 buttons,
                 links,
-                alerts
+                alerts,
+                forms
             };
         }"""
         try:

@@ -43,10 +43,12 @@ class CoverageCritic:
         scenarios: List[DiscoveredScenario],
         has_credentials: bool = False,
         retry_count: int = 0,
+        target_test_count: Optional[int] = None,
+        discovered_routes: Optional[List[str]] = None,
     ) -> CriticResult:
         """
         Analyzes scenarios, tallies category counts, checks auth coverage,
-        and returns a CriticResult with verdict proceed, re_explore, or escalate.
+        verifies target scenario volume (if requested), and returns a CriticResult.
         """
         happy_count = sum(1 for s in scenarios if getattr(s, "category", "") == "happy_path")
         edge_count = sum(1 for s in scenarios if getattr(s, "category", "") == "edge_case")
@@ -77,11 +79,13 @@ class CoverageCritic:
             "error_flow": error_count,
             "auth_coverage": auth_count,
         }
+        if target_test_count is not None:
+            counts["target_test_count"] = target_test_count
 
         gaps: List[str] = []
         guidance: List[str] = []
 
-        total_criteria = 3
+        total_criteria = 3  # happy, edge, error
         satisfied_criteria = 0
 
         # Category checks
@@ -102,6 +106,15 @@ class CoverageCritic:
         else:
             gaps.append("Missing error flow coverage (no invalid inputs or error handling tested)")
             guidance.append("Test invalid routes, invalid form data, and check for appropriate error messages or 404 responses.")
+
+        # Scenario Volume Check (only if specified)
+        if target_test_count is not None and target_test_count > 0:
+            total_criteria += 1
+            if len(scenarios) >= target_test_count:
+                satisfied_criteria += 1
+            else:
+                gaps.append(f"Scenario volume under target ({len(scenarios)} generated vs {target_test_count} target)")
+                guidance.append(f"Expand testing breadth across routes and forms to reach at least {target_test_count} comprehensive scenarios.")
 
         # Auth check
         if has_credentials:

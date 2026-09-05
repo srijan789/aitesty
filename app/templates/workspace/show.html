@@ -59,10 +59,46 @@
         </a>
       </div>
 
-      <!-- Live Browser Visibility & Slow-Mo Controls -->
+      <!-- Live Browser Visibility & Crawler Depth Controls -->
       <div class="flex flex-wrap items-center gap-3 bg-slate-50 border border-slate-200/90 px-3.5 py-1.5 rounded-xl text-xs text-slate-700 shadow-xs">
+        <!-- Crawler Depth & Target Controls -->
         <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center">
-          <i class="fa-solid fa-display text-indigo-500 mr-1.5"></i>Browser UI:
+          <i class="fa-solid fa-sitemap text-purple-600 mr-1.5"></i>Crawler:
+        </span>
+        <div class="flex items-center space-x-1" title="How many link hops deep the crawler should explore">
+          <span class="text-[11px] font-medium text-slate-500">Depth:</span>
+          <select id="select-crawl-depth" onchange="persistCrawlerSettings()" class="text-[11px] font-semibold bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500">
+            <option value="1" {% if project.crawl_depth == 1 %}selected{% endif %}>1 (Landing)</option>
+            <option value="2" {% if (project.crawl_depth or 2) == 2 %}selected{% endif %}>2 (Standard)</option>
+            <option value="3" {% if project.crawl_depth == 3 %}selected{% endif %}>3 (Deep)</option>
+            <option value="4" {% if project.crawl_depth == 4 %}selected{% endif %}>4 (Exhaustive)</option>
+          </select>
+        </div>
+        <span class="text-slate-300">&bull;</span>
+        <div class="flex items-center space-x-1" title="Minimum test scenarios to synthesize across routes">
+          <span class="text-[11px] font-medium text-slate-500">Target Tests:</span>
+          <select id="select-target-tests" onchange="persistCrawlerSettings()" class="text-[11px] font-semibold bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500">
+            <option value="8" {% if project.target_test_count == 8 %}selected{% endif %}>8 tests</option>
+            <option value="12" {% if (project.target_test_count or 12) == 12 %}selected{% endif %}>12 tests</option>
+            <option value="16" {% if project.target_test_count == 16 %}selected{% endif %}>16 tests</option>
+            <option value="20" {% if project.target_test_count == 20 %}selected{% endif %}>20 tests</option>
+            <option value="25" {% if project.target_test_count == 25 %}selected{% endif %}>25 tests</option>
+          </select>
+        </div>
+        <span class="text-slate-300">&bull;</span>
+        <div class="flex items-center space-x-1" title="Maximum unique routes/pages to crawl">
+          <span class="text-[11px] font-medium text-slate-500">Max Pages:</span>
+          <select id="select-max-pages" onchange="persistCrawlerSettings()" class="text-[11px] font-semibold bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500">
+            <option value="5" {% if project.max_pages == 5 %}selected{% endif %}>5</option>
+            <option value="10" {% if (project.max_pages or 10) == 10 %}selected{% endif %}>10</option>
+            <option value="15" {% if project.max_pages == 15 %}selected{% endif %}>15</option>
+            <option value="20" {% if project.max_pages == 20 %}selected{% endif %}>20</option>
+          </select>
+        </div>
+        <span class="text-slate-300">&bull;</span>
+        <!-- Browser UI options -->
+        <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center">
+          <i class="fa-solid fa-display text-indigo-500 mr-1.5"></i>UI:
         </span>
         <label class="inline-flex items-center space-x-1.5 cursor-pointer select-none group" title="Launch visible Chromium browser window during exploration agent run">
           <input type="checkbox" id="chk-headed-explore" onchange="persistBrowserSettings()" class="w-3.5 h-3.5 rounded text-indigo-600 border-slate-300 focus:ring-indigo-500 cursor-pointer">
@@ -215,6 +251,31 @@
       const savedSlowMo = localStorage.getItem('aitesty_slow_mo');
       if (savedSlowMo !== null) selectSlowMo.value = savedSlowMo;
     }
+
+    const selDepth = document.getElementById('select-crawl-depth');
+    const selTarget = document.getElementById('select-target-tests');
+    const selMax = document.getElementById('select-max-pages');
+    if (selDepth) {
+      const savedDepth = localStorage.getItem('aitesty_crawl_depth');
+      if (savedDepth !== null) selDepth.value = savedDepth;
+    }
+    if (selTarget) {
+      const savedTarget = localStorage.getItem('aitesty_target_tests');
+      if (savedTarget !== null) selTarget.value = savedTarget;
+    }
+    if (selMax) {
+      const savedMax = localStorage.getItem('aitesty_max_pages');
+      if (savedMax !== null) selMax.value = savedMax;
+    }
+  }
+
+  function persistCrawlerSettings() {
+    const selDepth = document.getElementById('select-crawl-depth');
+    const selTarget = document.getElementById('select-target-tests');
+    const selMax = document.getElementById('select-max-pages');
+    if (selDepth) localStorage.setItem('aitesty_crawl_depth', selDepth.value);
+    if (selTarget) localStorage.setItem('aitesty_target_tests', selTarget.value);
+    if (selMax) localStorage.setItem('aitesty_max_pages', selMax.value);
   }
 
   function persistBrowserSettings() {
@@ -254,10 +315,21 @@
     if (btn) btn.disabled = true;
     try {
       const browserOpts = getBrowserExecutionOptions('explore');
+      const selDepth = document.getElementById('select-crawl-depth');
+      const selTarget = document.getElementById('select-target-tests');
+      const selMax = document.getElementById('select-max-pages');
+
+      const payload = {
+        ...browserOpts,
+        crawl_depth: selDepth ? parseInt(selDepth.value, 10) : {{ project.crawl_depth or 2 }},
+        target_test_count: selTarget ? parseInt(selTarget.value, 10) : {{ project.target_test_count or 12 }},
+        max_pages: selMax ? parseInt(selMax.value, 10) : {{ project.max_pages or 10 }},
+      };
+
       const res = await fetch(`/api/projects/${projectId}/explore`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(browserOpts),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (data.success && data.run_id) {

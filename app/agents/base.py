@@ -14,6 +14,10 @@ class ExplorerConfig:
     prd_text: Optional[str] = None
     headless: bool = True
     slow_mo: int = 0
+    crawl_depth: int = 2
+    max_pages: int = 10
+    target_test_count: int = 12
+    exploration_strategy: str = "balanced"
 
 @dataclass
 class ScenarioStep:

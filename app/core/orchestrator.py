@@ -34,6 +34,10 @@ class TestOrchestrator:
         trigger_source: str = "manual",
         headless: Optional[bool] = None,
         slow_mo: Optional[int] = None,
+        crawl_depth: Optional[int] = None,
+        max_pages: Optional[int] = None,
+        target_test_count: Optional[int] = None,
+        exploration_strategy: Optional[str] = None,
     ) -> TestRun:
         project = db.get_or_404(Project, project_id)
         wm = cls.get_workspace_manager()
@@ -61,6 +65,10 @@ class TestOrchestrator:
             project_id=project.id,
             headless=headless,
             slow_mo=slow_mo,
+            crawl_depth=crawl_depth,
+            max_pages=max_pages,
+            target_test_count=target_test_count,
+            exploration_strategy=exploration_strategy,
         )
         return run
 
@@ -72,6 +80,10 @@ class TestOrchestrator:
         project_id: str,
         headless: Optional[bool] = None,
         slow_mo: Optional[int] = None,
+        crawl_depth: Optional[int] = None,
+        max_pages: Optional[int] = None,
+        target_test_count: Optional[int] = None,
+        exploration_strategy: Optional[str] = None,
     ):
         wm = cls.get_workspace_manager()
         project = db.session.get(Project, project_id)
@@ -80,10 +92,28 @@ class TestOrchestrator:
         if not project or not run:
             return
 
+        proj_id = project.id
+        proj_name = project.name
+        proj_target_url = project.target_url
+        proj_auth_type = project.auth_type
+        proj_credentials = project.get_credentials()
+        proj_scope = project.scope_instructions or ""
+        proj_prd = project.prd_text
+        proj_crawl_depth = project.crawl_depth or 2
+        proj_max_pages = project.max_pages or 10
+        proj_target_tests = project.target_test_count or 12
+        proj_strategy = project.exploration_strategy or "balanced"
+
+        # Resolve parameters from arguments or project model defaults
+        eff_crawl_depth = crawl_depth if crawl_depth is not None else proj_crawl_depth
+        eff_max_pages = max_pages if max_pages is not None else proj_max_pages
+        eff_target_tests = target_test_count if target_test_count is not None else proj_target_tests
+        eff_strategy = exploration_strategy if exploration_strategy else proj_strategy
+
         def log_callback(level: str, message: str, metadata: Optional[Dict[str, Any]] = None):
-            wm.append_run_log_file(project.id, run.id, level, message)
+            wm.append_run_log_file(proj_id, run_id, level, message)
             log_entry = RunLog(
-                run_id=run.id,
+                run_id=run_id,
                 level=level.upper(),
                 message=message,
                 metadata_json=json.dumps(metadata) if metadata else None,
@@ -91,11 +121,11 @@ class TestOrchestrator:
             db.session.add(log_entry)
             db.session.commit()
 
-        log_callback("INFO", f"Starting exploration run {run.id} for project '{project.name}'")
+        log_callback("INFO", f"Starting exploration run {run_id} for project '{proj_name}' [Depth: {eff_crawl_depth}, Max Pages: {eff_max_pages}, Target Tests: {eff_target_tests}]")
 
-        agent_type = current_app.config.get("EXPLORER_AGENT_TYPE", "mock")
+        agent_type = current_app.config.get("EXPLORER_AGENT_TYPE", "playwright")
         agent = get_explorer_agent(agent_type)
-        project_dir = wm.get_project_dir(project.id)
+        project_dir = wm.get_project_dir(proj_id)
 
         if headless is None:
             headless = current_app.config.get("PLAYWRIGHT_HEADLESS", True)
@@ -104,22 +134,26 @@ class TestOrchestrator:
 
         critic = CoverageCritic(max_retries=2)
         retry_count = 0
-        current_scope = project.scope_instructions or ""
+        current_scope = proj_scope
         critic_result = None
-        has_creds = bool(project.get_credentials() or (project.auth_type and project.auth_type != "none"))
+        has_creds = bool(proj_credentials or (proj_auth_type and proj_auth_type != "none"))
 
         while True:
             config = ExplorerConfig(
-                project_id=project.id,
-                target_url=project.target_url,
-                auth_type=project.auth_type,
-                credentials=project.get_credentials(),
+                project_id=proj_id,
+                target_url=proj_target_url,
+                auth_type=proj_auth_type,
+                credentials=proj_credentials,
                 scope_instructions=current_scope,
                 workspace_dir=str(project_dir),
-                run_id=run.id,
-                prd_text=project.prd_text,
+                run_id=run_id,
+                prd_text=proj_prd,
                 headless=headless,
                 slow_mo=slow_mo,
+                crawl_depth=eff_crawl_depth,
+                max_pages=eff_max_pages,
+                target_test_count=eff_target_tests,
+                exploration_strategy=eff_strategy,
             )
 
             result = agent.explore(
@@ -146,6 +180,8 @@ class TestOrchestrator:
                 scenarios=result.scenarios,
                 has_credentials=has_creds,
                 retry_count=retry_count,
+                target_test_count=eff_target_tests,
+                discovered_routes=result.discovered_routes,
             )
 
             log_callback(
@@ -157,7 +193,7 @@ class TestOrchestrator:
             if critic_result.verdict == "re_explore" and retry_count < 2:
                 retry_count += 1
                 log_callback("INFO", f"[Coverage Critic] Triggering re-exploration attempt {retry_count}/2 with targeted feedback...")
-                current_scope = (project.scope_instructions or "") + f"\n\n[Coverage Critic Feedback (Attempt {retry_count})]: {critic_result.feedback}"
+                current_scope = proj_scope + f"\n\n[Coverage Critic Feedback (Attempt {retry_count})]: {critic_result.feedback}"
                 continue
 
             if critic_result.verdict == "escalate":
@@ -170,17 +206,17 @@ class TestOrchestrator:
         log_callback("INFO", "Persisting test plan and scenarios to database and workspace filesystem...")
 
         # Calculate new version number
-        latest_plan = TestPlan.query.filter_by(project_id=project.id).order_by(TestPlan.version.desc()).first()
+        latest_plan = TestPlan.query.filter_by(project_id=proj_id).order_by(TestPlan.version.desc()).first()
         new_version = (latest_plan.version + 1) if latest_plan else 1
 
         # Archive prior active plans
-        TestPlan.query.filter_by(project_id=project.id, status="active").update({"status": "archived"})
+        TestPlan.query.filter_by(project_id=proj_id, status="active").update({"status": "archived"})
 
         new_plan = TestPlan(
-            project_id=project.id,
+            project_id=proj_id,
             version=new_version,
             status="active",
-            summary=f"Automated Test Plan for {project.name} (v{new_version})",
+            summary=f"Automated Test Plan for {proj_name} (v{new_version})",
         )
         db.session.add(new_plan)
         db.session.flush()
@@ -206,8 +242,8 @@ class TestOrchestrator:
 
         # Build plan JSON & Markdown and write to disk
         plan_dict = {
-            "project_id": project.id,
-            "project_name": project.name,
+            "project_id": proj_id,
+            "project_name": proj_name,
             "version": new_version,
             "status": "active",
             "summary": new_plan.summary,
@@ -215,8 +251,8 @@ class TestOrchestrator:
             "scenarios": scenarios_json_list,
         }
 
-        paths = wm.save_test_plan(project.id, plan_dict, result.markdown_plan)
-        new_plan.raw_markdown = wm.load_test_plan_md(project.id)
+        paths = wm.save_test_plan(proj_id, plan_dict, result.markdown_plan)
+        new_plan.raw_markdown = wm.load_test_plan_md(proj_id)
 
         stats = {
             "total_scenarios": len(result.scenarios),
@@ -224,6 +260,9 @@ class TestOrchestrator:
             "edge_case": sum(1 for s in result.scenarios if s.category == "edge_case"),
             "error_flow": sum(1 for s in result.scenarios if s.category == "error_flow"),
             "routes_discovered": len(result.discovered_routes),
+            "crawl_depth": eff_crawl_depth,
+            "max_pages": eff_max_pages,
+            "target_test_count": eff_target_tests,
             "critic_verdict": critic_result.verdict if critic_result else "proceed",
             "critic_score": critic_result.score if critic_result else 1.0,
             "coverage_gaps": critic_result.gaps if critic_result else [],

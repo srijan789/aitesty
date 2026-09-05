@@ -24,11 +24,31 @@ def trigger_exploration(project_id):
         if slow_mo is None and "slow_mo" in request.args:
             slow_mo = request.args.get("slow_mo", type=int)
 
+        crawl_depth = data.get("crawl_depth")
+        if crawl_depth is None and "crawl_depth" in request.args:
+            crawl_depth = request.args.get("crawl_depth", type=int)
+
+        max_pages = data.get("max_pages")
+        if max_pages is None and "max_pages" in request.args:
+            max_pages = request.args.get("max_pages", type=int)
+
+        target_test_count = data.get("target_test_count")
+        if target_test_count is None and "target_test_count" in request.args:
+            target_test_count = request.args.get("target_test_count", type=int)
+
+        exploration_strategy = data.get("exploration_strategy")
+        if exploration_strategy is None and "exploration_strategy" in request.args:
+            exploration_strategy = request.args.get("exploration_strategy")
+
         run = TestOrchestrator.trigger_exploration(
             project_id,
             trigger_source="api",
             headless=headless,
             slow_mo=slow_mo,
+            crawl_depth=crawl_depth,
+            max_pages=max_pages,
+            target_test_count=target_test_count,
+            exploration_strategy=exploration_strategy,
         )
         return jsonify({
             "success": True,

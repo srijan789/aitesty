@@ -46,6 +46,10 @@ def create_app(config_class=Config):
                     "ALTER TABLE test_cases ADD COLUMN healing_status VARCHAR(50)",
                     "ALTER TABLE run_logs ADD COLUMN test_name VARCHAR(150)",
                     "ALTER TABLE run_logs ADD COLUMN scenario_id VARCHAR(50)",
+                    "ALTER TABLE projects ADD COLUMN crawl_depth INTEGER DEFAULT 2",
+                    "ALTER TABLE projects ADD COLUMN max_pages INTEGER DEFAULT 10",
+                    "ALTER TABLE projects ADD COLUMN target_test_count INTEGER DEFAULT 12",
+                    "ALTER TABLE projects ADD COLUMN exploration_strategy VARCHAR(50) DEFAULT 'balanced'",
                 ]:
                     try:
                         conn.execute(text(col_sql))

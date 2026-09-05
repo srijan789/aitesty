@@ -29,19 +29,19 @@ class MockExplorerAgent(BaseExplorerAgent):
             return False
 
         log_callback("INFO", f"Initializing Explorer Agent for target: {config.target_url}", {"url": config.target_url})
-        time.sleep(0.4)
+        time.sleep(0.05)
         if check_cancelled():
             return ExplorerResult(status="cancelled")
 
         # Step 1: Headless browser boot
         log_callback("INFO", "Launching headless Chromium browser instance...", {"browser": "chromium", "viewport": "1920x1080"})
-        time.sleep(0.4)
+        time.sleep(0.05)
         if check_cancelled():
             return ExplorerResult(status="cancelled")
 
         # Step 2: Navigate to target URL
         log_callback("INFO", f"Navigating to {config.target_url} (HTTP GET)", {"status": "navigating"})
-        time.sleep(0.5)
+        time.sleep(0.05)
         if check_cancelled():
             return ExplorerResult(status="cancelled")
         log_callback("INFO", "Target application loaded. DOM Content Loaded in 342ms. Status: 200 OK", {"dom_ready_ms": 342})
@@ -49,13 +49,13 @@ class MockExplorerAgent(BaseExplorerAgent):
         # Step 3: Auth inspection & form filling
         if config.auth_type != "none":
             log_callback("INFO", f"Detected {config.auth_type.upper()} authentication required. Scanning for login inputs...", None)
-            time.sleep(0.4)
+            time.sleep(0.05)
             if check_cancelled():
                 return ExplorerResult(status="cancelled")
 
             username = config.credentials.get("username", "admin")
             log_callback("INFO", f"Found input[name='username'] and input[type='password']. Submitting credentials for '{username}'...", None)
-            time.sleep(0.5)
+            time.sleep(0.05)
             if check_cancelled():
                 return ExplorerResult(status="cancelled")
 
@@ -63,7 +63,7 @@ class MockExplorerAgent(BaseExplorerAgent):
         else:
             log_callback("INFO", "No authentication configured. Proceeding with public page exploration.", None)
 
-        time.sleep(0.3)
+        time.sleep(0.05)
         if check_cancelled():
             return ExplorerResult(status="cancelled")
 
@@ -75,13 +75,13 @@ class MockExplorerAgent(BaseExplorerAgent):
             f"{config.target_url.rstrip('/')}/users",
         ]
         log_callback("INFO", f"Discovered {len(discovered_routes)} navigation routes across application DOM.", {"routes": discovered_routes})
-        time.sleep(0.4)
+        time.sleep(0.05)
         if check_cancelled():
             return ExplorerResult(status="cancelled")
 
         # Step 5: Test scenario synthesis
         log_callback("INFO", "Synthesizing test scenarios from interaction graph...", None)
-        time.sleep(0.4)
+        time.sleep(0.05)
         if check_cancelled():
             return ExplorerResult(status="cancelled")
 
@@ -166,6 +166,25 @@ class MockExplorerAgent(BaseExplorerAgent):
                 status="pending_review",
             ),
         ]
+
+        target_count = getattr(config, "target_test_count", 12) or 12
+        while len(scenarios) < target_count:
+            idx = len(scenarios) + 1
+            cat = ["happy_path", "edge_case", "error_flow"][idx % 3]
+            scenarios.append(DiscoveredScenario(
+                title=f"Discovered Feature Validation Scenario {idx}",
+                category=cat,
+                priority="P2",
+                preconditions="Application loaded and accessible.",
+                description=f"Automated scenario {idx} validating feature component state and navigation.",
+                steps=[
+                    {"step_number": 1, "action": "Navigate", "target_element": config.target_url, "expected_outcome": "Page loaded"},
+                    {"step_number": 2, "action": "Assert", "target_element": "body", "expected_outcome": "Element rendered"},
+                ],
+                expected_result="Feature component processes actions properly.",
+                pass_fail_criteria="PASS: Component rendered cleanly.\nFAIL: Component failed to render.",
+                status="pending_review",
+            ))
 
         log_callback("INFO", f"Exploration complete. Synthesized {len(scenarios)} QA test scenarios across 3 categories (awaiting user review).", {
             "total_scenarios": len(scenarios),
