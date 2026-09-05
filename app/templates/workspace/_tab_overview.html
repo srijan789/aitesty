@@ -1,4 +1,31 @@
 <div class="space-y-6">
+  <!-- Autonomous End-to-End QA Agent Banner Card -->
+  <div class="bg-gradient-to-r from-violet-900 via-indigo-900 to-purple-950 rounded-2xl p-6 text-white shadow-md border border-indigo-500/30">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div class="space-y-1.5 max-w-2xl">
+        <div class="flex items-center space-x-2">
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/30 text-indigo-300 border border-indigo-400/40">
+            <i class="fa-solid fa-wand-magic-sparkles mr-1.5 text-amber-300"></i>AUTONOMOUS END-TO-END AGENT
+          </span>
+        </div>
+        <h3 class="text-base font-bold text-white tracking-tight">
+          Run Complete QA Lifecycle Autonomously
+        </h3>
+        <p class="text-xs text-indigo-200/90 leading-relaxed">
+          The End-to-End Agent executes all 5 stages without human intervention: 
+          <strong>1. Deep Crawl</strong> ➔ <strong>2. Plan Review & Approval</strong> ➔ <strong>3. Code Generation</strong> ➔ <strong>4. Test Execution</strong> ➔ <strong>5. Self-Healing (max 2 iterations)</strong>.
+        </p>
+      </div>
+
+      <div class="flex items-center">
+        <button type="button" onclick="triggerE2EPipeline('{{ project.id }}')"
+          class="inline-flex items-center px-5 py-3 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 shadow-lg shadow-orange-500/25 transition transform hover:scale-[1.02]">
+          <i class="fa-solid fa-rocket mr-2 text-white text-sm"></i>Start End-to-End Agent
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Target URL & Workspace Info Card -->
   <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
     <h3 class="text-sm font-semibold text-slate-900 mb-4 flex items-center">

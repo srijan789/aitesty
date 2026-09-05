@@ -81,6 +81,7 @@ class WorkspaceManager:
 
     def save_test_plan(self, project_id: str, plan_data: Dict[str, Any], markdown_content: str = "") -> Dict[str, Path]:
         project_dir = self.get_project_dir(project_id)
+        project_dir.mkdir(parents=True, exist_ok=True)
         json_path = project_dir / "test_plan.json"
         md_path = project_dir / "test_plan.md"
 

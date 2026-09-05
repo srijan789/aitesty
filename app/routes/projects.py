@@ -73,7 +73,21 @@ def create():
     wm = get_wm()
     wm.init_project_workspace(project)
 
-    flash(f"Project '{project.name}' successfully created.", "success")
+    auto_run_e2e = request.form.get("auto_run_e2e") in ["true", "on", "1", True]
+    if auto_run_e2e:
+        from app.core.orchestrator import TestOrchestrator
+        TestOrchestrator.trigger_e2e_pipeline(
+            project_id=project.id,
+            crawl_depth=crawl_depth,
+            max_pages=max_pages,
+            target_test_count=target_test_count,
+            exploration_strategy=exploration_strategy,
+            trigger_source="project_created",
+        )
+        flash(f"Project '{project.name}' created! Autonomous End-to-End QA Agent activated.", "success")
+    else:
+        flash(f"Project '{project.name}' successfully created.", "success")
+
     return redirect(url_for("workspace_views.show", project_id=project.id))
 
 @projects_bp.route("/projects/<project_id>/edit", methods=["GET"])

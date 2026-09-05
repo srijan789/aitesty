@@ -38,23 +38,28 @@
     <!-- Quick Action Launch Buttons & Browser Visibility -->
     <div class="flex flex-col items-start md:items-end gap-3">
       <div class="flex flex-wrap items-center gap-3">
+        <button type="button" onclick="triggerE2EPipeline('{{ project.id }}')" id="btn-trigger-e2e"
+          class="inline-flex items-center px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-violet-600 via-indigo-600 to-purple-700 hover:opacity-95 shadow-md shadow-indigo-600/30 transition ring-2 ring-indigo-300/40">
+          <i class="fa-solid fa-wand-magic-sparkles mr-2 text-amber-300"></i>Run End-to-End Agent
+        </button>
+
         <button type="button" onclick="triggerExploration('{{ project.id }}')" id="btn-trigger-explore"
-          class="inline-flex items-center px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:opacity-95 shadow-md shadow-indigo-500/25 transition">
-          <i class="fa-solid fa-bolt mr-2 text-amber-300"></i>Run Explorer Agent
+          class="inline-flex items-center px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 shadow-xs transition">
+          <i class="fa-solid fa-bolt mr-1.5 text-amber-500"></i>Explore Only
         </button>
 
         <button type="button" onclick="triggerTestGeneration('{{ project.id }}')" id="btn-trigger-gen"
-          class="inline-flex items-center px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:opacity-95 shadow-md shadow-emerald-500/25 transition">
-          <i class="fa-solid fa-wand-magic-sparkles mr-2 text-amber-200"></i>Create Tests
+          class="inline-flex items-center px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 shadow-xs transition">
+          <i class="fa-solid fa-file-code mr-1.5 text-teal-500"></i>Create Tests
         </button>
 
         <button type="button" onclick="triggerTestExecution('{{ project.id }}')" id="btn-trigger-tests"
-          class="inline-flex items-center px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-600/20 transition">
-          <i class="fa-solid fa-play mr-2 text-xs"></i>Run Test Suite
+          class="inline-flex items-center px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 shadow-xs transition">
+          <i class="fa-solid fa-play mr-1.5 text-emerald-500"></i>Run Tests
         </button>
 
         <a href="{{ url_for('projects.edit_form', project_id=project.id) }}"
-          class="inline-flex items-center px-3.5 py-2.5 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition">
+          class="inline-flex items-center px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition">
           <i class="fa-solid fa-gear text-slate-500 mr-1.5"></i>Settings
         </a>
       </div>
@@ -307,6 +312,40 @@
         headless: !isHeaded,
         slow_mo: isHeaded ? slowMoVal : 0,
       };
+    }
+  }
+
+  async function triggerE2EPipeline(projectId) {
+    const btn = document.getElementById('btn-trigger-e2e');
+    if (btn) btn.disabled = true;
+    try {
+      const browserOpts = getBrowserExecutionOptions('explore');
+      const selDepth = document.getElementById('select-crawl-depth');
+      const selTarget = document.getElementById('select-target-tests');
+      const selMax = document.getElementById('select-max-pages');
+
+      const payload = {
+        ...browserOpts,
+        crawl_depth: selDepth ? parseInt(selDepth.value, 10) : {{ project.crawl_depth or 2 }},
+        target_test_count: selTarget ? parseInt(selTarget.value, 10) : {{ project.target_test_count or 12 }},
+        max_pages: selMax ? parseInt(selMax.value, 10) : {{ project.max_pages or 10 }},
+      };
+
+      const res = await fetch(`/api/projects/${projectId}/e2e`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.success && data.run_id) {
+        window.location.href = `/projects/${projectId}/runs/${data.run_id}`;
+      } else {
+        alert("Failed to trigger End-to-End agent: " + (data.error || "Unknown error"));
+        if (btn) btn.disabled = false;
+      }
+    } catch (err) {
+      alert("Request error: " + err.message);
+      if (btn) btn.disabled = false;
     }
   }
 

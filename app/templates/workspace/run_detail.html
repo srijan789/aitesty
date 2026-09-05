@@ -19,7 +19,9 @@
     <div class="space-y-2">
       <div class="flex items-center space-x-3">
         <h1 class="text-xl font-bold text-slate-900 tracking-tight">
-          {% if run.run_type == 'exploration' %}
+          {% if run.run_type == 'e2e_pipeline' %}
+            Autonomous End-to-End QA Pipeline Run
+          {% elif run.run_type == 'exploration' %}
             Autonomous Exploration Run
           {% elif run.run_type == 'test_generation' %}
             Autonomous Test Creation Run
