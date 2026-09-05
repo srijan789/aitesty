@@ -89,6 +89,8 @@ class MockExplorerAgent(BaseExplorerAgent):
             DiscoveredScenario(
                 title="User Authentication & Dashboard Redirect",
                 category="happy_path",
+                priority="P0",
+                preconditions="Valid test account registered with username 'admin'.",
                 description="Verify that a valid user can log in and is redirected to the main dashboard.",
                 steps=[
                     {"step_number": 1, "action": "Navigate", "target_element": "/login", "expected_outcome": "Login form displays"},
@@ -98,11 +100,14 @@ class MockExplorerAgent(BaseExplorerAgent):
                     {"step_number": 5, "action": "Assert", "target_element": "h1.dashboard-title", "expected_outcome": "Dashboard renders successfully"},
                 ],
                 expected_result="User session created, HTTP 200 on /dashboard, greeting header visible.",
-                suggested_spec_filename="tests/test_auth_flow.spec.py",
+                pass_fail_criteria="PASS: Auth session established, redirected to /dashboard, greeting header visible.\nFAIL: Remains on login page, 401 error, or 500 server error.",
+                status="pending_review",
             ),
             DiscoveredScenario(
                 title="Navigation Menu Routing",
                 category="happy_path",
+                priority="P1",
+                preconditions="User authenticated and session active on /dashboard.",
                 description="Ensure all top-level sidebar navigation links load their corresponding view without uncaught console errors.",
                 steps=[
                     {"step_number": 1, "action": "Click", "target_element": "a[href='/users']", "expected_outcome": "Navigates to Users table"},
@@ -111,11 +116,14 @@ class MockExplorerAgent(BaseExplorerAgent):
                     {"step_number": 4, "action": "Assert", "target_element": "form#settings-form", "expected_outcome": "Settings form visible"},
                 ],
                 expected_result="All views render with HTTP 200 and zero JS console exceptions.",
-                suggested_spec_filename="tests/test_navigation.spec.py",
+                pass_fail_criteria="PASS: Each route responds with HTTP 200 and matching view title.\nFAIL: 404 page not found, broken styling, or uncaught JS error.",
+                status="pending_review",
             ),
             DiscoveredScenario(
                 title="Form Input Boundary & Special Characters",
                 category="edge_case",
+                priority="P2",
+                preconditions="Settings view loaded with interactive profile inputs.",
                 description="Submit text inputs with boundary lengths (255+ chars) and Unicode / emojis.",
                 steps=[
                     {"step_number": 1, "action": "Navigate", "target_element": "/settings", "expected_outcome": "Settings page loaded"},
@@ -123,11 +131,14 @@ class MockExplorerAgent(BaseExplorerAgent):
                     {"step_number": 3, "action": "Click", "target_element": "button#save", "expected_outcome": "Validation triggered or sanitized"},
                 ],
                 expected_result="Input is either accepted safely or graceful client validation prevents crash.",
-                suggested_spec_filename="tests/test_edge_cases.spec.py",
+                pass_fail_criteria="PASS: Input is sanitized or inline length validation displays.\nFAIL: Database truncation error, unhandled exception, or layout distortion.",
+                status="pending_review",
             ),
             DiscoveredScenario(
                 title="Invalid Credentials Rejection",
                 category="error_flow",
+                priority="P1",
+                preconditions="Unauthenticated session on /login.",
                 description="Attempt login with wrong password and assert that an explicit error banner appears without crash.",
                 steps=[
                     {"step_number": 1, "action": "Navigate", "target_element": "/login", "expected_outcome": "Login form rendered"},
@@ -137,72 +148,26 @@ class MockExplorerAgent(BaseExplorerAgent):
                     {"step_number": 5, "action": "Assert", "target_element": ".alert-danger", "expected_outcome": "Invalid credentials banner shown"},
                 ],
                 expected_result="User remains on /login with HTTP 401 or user-friendly error message.",
-                suggested_spec_filename="tests/test_error_handling.spec.py",
+                pass_fail_criteria="PASS: Alert banner 'Invalid credentials' displayed, password input cleared.\nFAIL: User logged in unexpectedly, white screen, or internal server error.",
+                status="pending_review",
             ),
             DiscoveredScenario(
                 title="404 Page Not Found Handling",
                 category="error_flow",
+                priority="P2",
+                preconditions="Application web server active.",
                 description="Navigate to an invalid non-existent URL route and assert custom 404 page.",
                 steps=[
                     {"step_number": 1, "action": "Navigate", "target_element": "/non-existent-random-route-99", "expected_outcome": "Page requested"},
                     {"step_number": 2, "action": "Assert", "target_element": "h1", "expected_outcome": "Contains 'Page Not Found' or 404 banner"},
                 ],
                 expected_result="Clean 404 response without exposing raw stack traces or internal server error.",
-                suggested_spec_filename="tests/test_error_handling.spec.py",
+                pass_fail_criteria="PASS: Custom 404 template visible with navigation back to safe route.\nFAIL: Raw server stack trace or blank page.",
+                status="pending_review",
             ),
         ]
 
-        # Step 6: Generate Playwright test script in workspace
-        tests_dir = Path(config.workspace_dir) / "tests"
-        tests_dir.mkdir(parents=True, exist_ok=True)
-        sample_spec_path = tests_dir / "test_auth_flow.spec.py"
-        
-        spec_content = f'''"""
-Autonomous Generated Playwright Test Suite for {config.target_url}
-Generated by Aitesty Autonomous Explorer
-"""
-import pytest
-from playwright.sync_api import Page, expect
-
-TARGET_URL = "{config.target_url}"
-
-def test_user_authentication_flow(page: Page):
-    """Scenario: User Authentication & Dashboard Redirect"""
-    page.goto(f"{{TARGET_URL}}/login")
-    
-    # Fill login form
-    if page.locator("input[name='username']").is_visible():
-        page.fill("input[name='username']", "{config.credentials.get('username', 'admin')}")
-        page.fill("input[name='password']", "secret_pass")
-        page.click("button[type='submit']")
-        
-        # Verify dashboard redirect
-        expect(page).to_have_url(f"{{TARGET_URL}}/dashboard")
-    else:
-        # If public page without login form, ensure home renders
-        page.goto(TARGET_URL)
-        expect(page).to_have_title(lambda t: len(t) > 0)
-
-def test_invalid_login_shows_error(page: Page):
-    """Scenario: Invalid Credentials Rejection"""
-    page.goto(f"{{TARGET_URL}}/login")
-    if page.locator("input[name='username']").is_visible():
-        page.fill("input[name='username']", "invalid_user")
-        page.fill("input[name='password']", "invalid_password")
-        page.click("button[type='submit']")
-        
-        # Expect error message
-        error_locator = page.locator(".alert, .error-message, [role='alert']")
-        expect(error_locator).to_be_visible()
-'''
-        with open(sample_spec_path, "w", encoding="utf-8") as f:
-            f.write(spec_content)
-
-        artifacts_created = [str(sample_spec_path)]
-        log_callback("INFO", f"Generated Playwright test script: tests/test_auth_flow.spec.py", {"file": "tests/test_auth_flow.spec.py"})
-        time.sleep(0.3)
-
-        log_callback("INFO", f"Exploration complete. Synthesized {len(scenarios)} test scenarios across 3 categories.", {
+        log_callback("INFO", f"Exploration complete. Synthesized {len(scenarios)} QA test scenarios across 3 categories (awaiting user review).", {
             "total_scenarios": len(scenarios),
             "happy_path": sum(1 for s in scenarios if s.category == "happy_path"),
             "edge_case": sum(1 for s in scenarios if s.category == "edge_case"),
@@ -213,5 +178,5 @@ def test_invalid_login_shows_error(page: Page):
             status="success",
             scenarios=scenarios,
             discovered_routes=discovered_routes,
-            artifacts_created=artifacts_created,
+            artifacts_created=[],
         )

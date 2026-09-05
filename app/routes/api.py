@@ -82,16 +82,16 @@ def cancel_run(run_id):
 @api_bp.route("/projects/<project_id>/test-plan", methods=["GET"])
 def get_test_plan(project_id):
     project = db.get_or_404(Project, project_id)
+    active_plan = TestPlan.query.filter_by(project_id=project.id, status="active").first()
+    if active_plan:
+        return jsonify(active_plan.to_dict())
+
+    # Fall back to disk if not in DB
     wm = get_wm()
     plan_json = wm.load_test_plan_json(project.id)
-    if not plan_json:
-        # Fall back to active plan in DB
-        active_plan = TestPlan.query.filter_by(project_id=project.id, status="active").first()
-        if active_plan:
-            plan_json = active_plan.to_dict()
-        else:
-            return jsonify({"message": "No test plan found for project"}), 404
-    return jsonify(plan_json)
+    if plan_json:
+        return jsonify(plan_json)
+    return jsonify({"message": "No test plan found for project"}), 404
 
 @api_bp.route("/projects/<project_id>/test-plan", methods=["PUT"])
 def update_test_plan(project_id):
@@ -119,10 +119,13 @@ def update_test_plan(project_id):
             test_plan_id=active_plan.id,
             title=sc.get("title", f"Scenario {idx+1}"),
             category=sc.get("category", "happy_path"),
+            priority=sc.get("priority", "P1"),
+            preconditions=sc.get("preconditions"),
             description=sc.get("description", ""),
             expected_result=sc.get("expected_result", ""),
+            pass_fail_criteria=sc.get("pass_fail_criteria"),
             script_path=sc.get("script_path"),
-            status=sc.get("status", "pending"),
+            status=sc.get("status", "pending_review"),
             execution_order=idx,
         )
         tc.set_steps(sc.get("steps", []))
@@ -135,6 +138,62 @@ def update_test_plan(project_id):
     wm.save_test_plan(project.id, data)
 
     return jsonify({"success": True, "message": "Test plan updated successfully."})
+
+@api_bp.route("/projects/<project_id>/scenarios/<scenario_id>/toggle-automation", methods=["POST"])
+def toggle_scenario_automation(project_id, scenario_id):
+    project = db.get_or_404(Project, project_id)
+    active_plan = TestPlan.query.filter_by(project_id=project.id, status="active").first_or_404()
+    tc = TestCase.query.filter_by(id=scenario_id, test_plan_id=active_plan.id).first_or_404()
+
+    target_status = request.get_json(silent=True) or {}
+    explicit_status = target_status.get("status")
+
+    if explicit_status:
+        tc.status = explicit_status
+    elif tc.status == "marked_for_automation":
+        tc.status = "pending_review"
+    else:
+        tc.status = "marked_for_automation"
+
+    db.session.commit()
+
+    # Sync to workspace filesystem
+    wm = get_wm()
+    wm.save_test_plan(project.id, active_plan.to_dict())
+
+    return jsonify({
+        "success": True,
+        "scenario_id": tc.id,
+        "new_status": tc.status,
+        "message": f"Scenario '{tc.title}' status updated to {tc.status}."
+    })
+
+@api_bp.route("/projects/<project_id>/scenarios/bulk-mark-automation", methods=["POST"])
+def bulk_mark_automation(project_id):
+    project = db.get_or_404(Project, project_id)
+    active_plan = TestPlan.query.filter_by(project_id=project.id, status="active").first_or_404()
+    
+    payload = request.get_json(silent=True) or {}
+    status_to_set = payload.get("status", "marked_for_automation")
+    scenario_ids = payload.get("scenario_ids")  # optional list of specific IDs
+
+    query = TestCase.query.filter_by(test_plan_id=active_plan.id)
+    if scenario_ids and isinstance(scenario_ids, list):
+        query = query.filter(TestCase.id.in_(scenario_ids))
+
+    updated_count = query.update({TestCase.status: status_to_set}, synchronize_session="fetch")
+    db.session.commit()
+
+    wm = get_wm()
+    wm.save_test_plan(project.id, active_plan.to_dict())
+
+    return jsonify({
+        "success": True,
+        "updated_count": updated_count,
+        "new_status": status_to_set,
+        "message": f"Updated {updated_count} scenarios to {status_to_set}."
+    })
+
 
 @api_bp.route("/projects/<project_id>/files", methods=["GET"])
 def list_files(project_id):

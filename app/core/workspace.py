@@ -55,6 +55,7 @@ class WorkspaceManager:
             "auth_type": project.auth_type,
             "credentials": project.get_credentials(),
             "scope_instructions": project.scope_instructions,
+            "prd_text": getattr(project, "prd_text", None),
             "created_at": project.created_at.isoformat() if project.created_at else datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat(),
         }
@@ -129,12 +130,16 @@ class WorkspaceManager:
             if cat_scenarios:
                 lines.append(f"### {cat_title}\n")
                 for s in cat_scenarios:
-                    lines.append(f"#### {s.get('title', 'Scenario')}")
+                    priority = s.get("priority", "P1")
+                    status = s.get("status", "pending_review")
+                    lines.append(f"#### [{priority}] {s.get('title', 'Scenario')} `({status})`")
                     if s.get("description"):
                         lines.append(f"{s['description']}\n")
+                    if s.get("preconditions"):
+                        lines.append(f"**Preconditions:** {s['preconditions']}\n")
                     steps = s.get("steps", [])
                     if steps:
-                        lines.append("**Steps:**")
+                        lines.append("**Execution Steps:**")
                         for idx, step in enumerate(steps, 1):
                             if isinstance(step, dict):
                                 action = step.get("action", "")
@@ -147,8 +152,10 @@ class WorkspaceManager:
                                 lines.append(f"{idx}. {step}")
                         lines.append("")
                     if s.get("expected_result"):
-                        lines.append(f"**Expected Result:** {s['expected_result']}\n")
-                lines.append("---")
+                        lines.append(f"**Expected Output:** {s['expected_result']}\n")
+                    if s.get("pass_fail_criteria"):
+                        lines.append(f"**Pass / Fail Criteria:** {s['pass_fail_criteria']}\n")
+                lines.append("---\n")
 
         return "\n".join(lines)
 

@@ -11,6 +11,7 @@ class ExplorerConfig:
     scope_instructions: Optional[str]
     workspace_dir: str
     run_id: str
+    prd_text: Optional[str] = None
 
 @dataclass
 class ScenarioStep:
@@ -34,16 +35,22 @@ class DiscoveredScenario:
     description: str
     steps: List[Dict[str, Any]]
     expected_result: str
-    suggested_spec_filename: Optional[str] = None
+    priority: str = "P1"  # "P0", "P1", "P2", "P3"
+    preconditions: Optional[str] = None
+    pass_fail_criteria: Optional[str] = None
+    status: str = "pending_review"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "title": self.title,
             "category": self.category,
+            "priority": self.priority,
+            "preconditions": self.preconditions,
             "description": self.description,
             "steps": self.steps,
             "expected_result": self.expected_result,
-            "suggested_spec_filename": self.suggested_spec_filename,
+            "pass_fail_criteria": self.pass_fail_criteria,
+            "status": self.status,
         }
 
 @dataclass

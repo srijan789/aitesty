@@ -13,6 +13,7 @@ class Project(db.Model):
     auth_type = db.Column(db.String(50), default="none")  # none, form, basic, bearer
     credentials_json = db.Column(db.Text, nullable=True)  # JSON-encoded credentials
     scope_instructions = db.Column(db.Text, nullable=True)
+    prd_text = db.Column(db.Text, nullable=True)  # Product Requirement Document / Specification
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -44,6 +45,7 @@ class Project(db.Model):
 
     @property
     def latest_plan(self):
+        from app.models.test_plan import TestPlan
         return (
             TestPlan.query.filter_by(project_id=self.id)
             .order_by(TestPlan.version.desc())
@@ -52,6 +54,7 @@ class Project(db.Model):
 
     @property
     def latest_run(self):
+        from app.models.test_run import TestRun
         return (
             TestRun.query.filter_by(project_id=self.id)
             .order_by(TestRun.started_at.desc())
@@ -67,6 +70,7 @@ class Project(db.Model):
             "auth_type": self.auth_type,
             "credentials": self.get_masked_credentials(),
             "scope_instructions": self.scope_instructions,
+            "prd_text": self.prd_text,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

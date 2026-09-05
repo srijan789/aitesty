@@ -1,0 +1,112 @@
+{
+  "project_id": "36080630-92a9-4647-b773-bbd11db3e014",
+  "project_name": "test1",
+  "version": 2,
+  "status": "active",
+  "summary": "Automated Test Plan for test1 (v2)",
+  "discovered_routes": [
+    "http://10.20.17.66:5050",
+    "http://10.20.17.66:5050/projects/773ea43d-978b-4e15-a748-fa4c8c5ecb00"
+  ],
+  "scenarios": [
+    {
+      "id": null,
+      "test_plan_id": "3b7c778e-51d5-4003-928f-cf143c71e16d",
+      "title": "Initial Application Load & Core View Render (QA Exploration Test Project - Workspace | Aitesty)",
+      "category": "happy_path",
+      "priority": "P0",
+      "preconditions": "Browser launched with clean cookies and active internet connection.",
+      "description": "Validate that a visitor navigating to http://10.20.17.66:5050/projects/773ea43d-978b-4e15-a748-fa4c8c5ecb00 receives a valid HTTP 200 and primary views render without errors.",
+      "steps": [
+        {
+          "step_number": 1,
+          "action": "Navigate",
+          "target_element": "http://10.20.17.66:5050/projects/773ea43d-978b-4e15-a748-fa4c8c5ecb00",
+          "expected_outcome": "HTTP 200 response with DOM ready"
+        },
+        {
+          "step_number": 2,
+          "action": "Assert",
+          "target_element": "body",
+          "expected_outcome": "Page title matches 'QA Exploration Test Project - Workspace | Aitesty'"
+        },
+        {
+          "step_number": 3,
+          "action": "Assert",
+          "target_element": "header, nav",
+          "expected_outcome": "Primary navigation elements rendered"
+        }
+      ],
+      "expected_result": "Application renders layout, navigation bar, and primary landing components.",
+      "pass_fail_criteria": "PASS: HTTP status is 200, page loads within 5s, zero uncaught JS console errors.\nFAIL: White screen, HTTP 4xx/5xx, or crash alert.",
+      "script_path": null,
+      "status": "pending_review",
+      "execution_order": 0,
+      "created_at": null
+    },
+    {
+      "id": null,
+      "test_plan_id": "3b7c778e-51d5-4003-928f-cf143c71e16d",
+      "title": "Input Boundary & Form Validation Probing",
+      "category": "edge_case",
+      "priority": "P1",
+      "preconditions": "Navigate to http://10.20.17.66:5050/projects/773ea43d-978b-4e15-a748-fa4c8c5ecb00 with accessible interactive forms.",
+      "description": "Probe input fields with boundary lengths (255+ characters), emojis, and whitespace-only submissions.",
+      "steps": [
+        {
+          "step_number": 1,
+          "action": "Navigate",
+          "target_element": "http://10.20.17.66:5050/projects/773ea43d-978b-4e15-a748-fa4c8c5ecb00",
+          "expected_outcome": "Form visible"
+        },
+        {
+          "step_number": 2,
+          "action": "Fill",
+          "target_element": "input",
+          "expected_outcome": "Enter string with special characters and boundary length"
+        },
+        {
+          "step_number": 3,
+          "action": "Click",
+          "target_element": "button[type='submit']",
+          "expected_outcome": "Form triggers client or server validation"
+        }
+      ],
+      "expected_result": "Client or server validates input gracefully without exposing stack traces.",
+      "pass_fail_criteria": "PASS: Validation banner or field error is displayed, input is sanitized.\nFAIL: Server 500 error, page crash, or raw SQL/exception leak.",
+      "script_path": null,
+      "status": "pending_review",
+      "execution_order": 1,
+      "created_at": null
+    },
+    {
+      "id": null,
+      "test_plan_id": "3b7c778e-51d5-4003-928f-cf143c71e16d",
+      "title": "Invalid Route & Error Boundary Handling",
+      "category": "error_flow",
+      "priority": "P1",
+      "preconditions": "Standard unauthenticated user session.",
+      "description": "Verify graceful user feedback when navigating to a non-existent URL or encountering broken links.",
+      "steps": [
+        {
+          "step_number": 1,
+          "action": "Navigate",
+          "target_element": "http://10.20.17.66:5050/projects/773ea43d-978b-4e15-a748-fa4c8c5ecb00/non-existent-qa-route-404",
+          "expected_outcome": "Route requested"
+        },
+        {
+          "step_number": 2,
+          "action": "Assert",
+          "target_element": "body",
+          "expected_outcome": "Clean 404 error page displayed with Home link"
+        }
+      ],
+      "expected_result": "Custom 404 page is displayed with navigation to return home.",
+      "pass_fail_criteria": "PASS: User-friendly 404 message visible, back to safety link functional.\nFAIL: Raw web server debug page, unhandled exception, or blank screen.",
+      "script_path": null,
+      "status": "pending_review",
+      "execution_order": 2,
+      "created_at": null
+    }
+  ]
+}
