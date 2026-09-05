@@ -1,4 +1,13 @@
 import os
+
+# TrueFoundry Gateway Configuration
+os.environ.setdefault(
+    "TRUEFOUNDRY_API_KEY",
+    "tfy_pat_default-u3n8eaqjipdolz2w8cz3uhcm_0E2iyumk9OfB7Vo68461d1270ac232560fa7cdd084688708",
+)
+os.environ.setdefault("TRUEFOUNDRY_BASE_URL", "https://gateway.truefoundry.ai")
+os.environ.setdefault("EXPLORER_MODEL", "openrouter/google-gemini-3.7-flash")
+
 from app import create_app
 
 app = create_app()

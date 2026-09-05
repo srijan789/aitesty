@@ -1,10 +1,15 @@
 from typing import Dict, Type
 from app.agents.base import BaseExplorerAgent, BaseGeneratorAgent, BaseHealerAgent
 from app.agents.mock_explorer import MockExplorerAgent
+<<<<<<< HEAD
 from app.agents.mock_generator import MockGeneratorAgent
 from app.agents.mock_healer import MockHealerAgent
+=======
+from app.agents.playwright_explorer import PlaywrightExplorerAgent
+>>>>>>> 145374c (Added the Exploratory + test planning agent)
 
 _EXPLORER_REGISTRY: Dict[str, Type[BaseExplorerAgent]] = {
+    "playwright": PlaywrightExplorerAgent,
     "mock": MockExplorerAgent,
 }
 
@@ -20,6 +25,7 @@ _HEALER_REGISTRY: Dict[str, Type[BaseHealerAgent]] = {
 def register_explorer_agent(name: str, agent_cls: Type[BaseExplorerAgent]):
     _EXPLORER_REGISTRY[name.lower()] = agent_cls
 
+<<<<<<< HEAD
 
 def register_generator_agent(name: str, agent_cls: Type[BaseGeneratorAgent]):
     _GENERATOR_REGISTRY[name.lower()] = agent_cls
@@ -31,6 +37,10 @@ def register_healer_agent(name: str, agent_cls: Type[BaseHealerAgent]):
 
 def get_explorer_agent(name: str = "mock") -> BaseExplorerAgent:
     agent_cls = _EXPLORER_REGISTRY.get(name.lower(), MockExplorerAgent)
+=======
+def get_explorer_agent(name: str = "playwright") -> BaseExplorerAgent:
+    agent_cls = _EXPLORER_REGISTRY.get(name.lower(), PlaywrightExplorerAgent)
+>>>>>>> 145374c (Added the Exploratory + test planning agent)
     return agent_cls()
 
 

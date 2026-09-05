@@ -110,6 +110,7 @@ class TestOrchestrator:
             scope_instructions=project.scope_instructions,
             workspace_dir=str(project_dir),
             run_id=run.id,
+            prd_text=project.prd_text,
         )
 
         cls.run_planner_agent(project, run, agent, config, log_callback, cancel_event.is_set)
@@ -174,18 +175,25 @@ class TestOrchestrator:
                 test_plan_id=new_plan.id,
                 title=s.title,
                 category=s.category,
+                priority=getattr(s, "priority", "P1"),
+                preconditions=getattr(s, "preconditions", None),
                 description=s.description,
                 expected_result=s.expected_result,
-                script_path=s.suggested_spec_filename,
-                status="automated" if s.suggested_spec_filename else "pending",
+                pass_fail_criteria=getattr(s, "pass_fail_criteria", None),
+                script_path=None,
+                status="pending_review",
                 execution_order=idx,
             )
             test_case.set_steps(s.steps)
             db.session.add(test_case)
+<<<<<<< HEAD
             db.session.flush()  # populate test_case.id so downstream stages can reference it
             scenario_dict = s.to_dict()
             scenario_dict["id"] = test_case.id
             scenarios_json_list.append(scenario_dict)
+=======
+            scenarios_json_list.append(test_case.to_dict())
+>>>>>>> 145374c (Added the Exploratory + test planning agent)
 
         # Build plan JSON & Markdown and write to disk
         plan_dict = {
@@ -242,7 +250,7 @@ class TestOrchestrator:
         test_files = wm.list_test_files(project.id)
 
         if not test_files:
-            log_callback("WARN", "No test spec files found in tests/ directory. Please run Explorer Agent first.")
+            log_callback("WARN", "No test spec files found in tests/ directory. Review test plan, mark scenarios for automation, and run the Test Creation Agent.")
             run.status = "completed"
             run.set_summary_stats({"passed": 0, "failed": 0, "skipped": 0, "total": 0})
             db.session.commit()

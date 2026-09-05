@@ -90,10 +90,27 @@
         </h3>
         <div>
           <label for="scope_instructions" class="block text-xs font-medium text-slate-700">Testing Boundaries (Optional)</label>
-          <textarea id="scope_instructions" name="scope_instructions" rows="3"
-            placeholder="e.g. Focus on products catalog and cart flow. Avoid clicking 'Delete Account' or 'Reset Database' buttons."
+          <textarea id="scope_instructions" name="scope_instructions" rows="2"
+            placeholder="e.g. Focus on checkout flow, skip billing. Avoid clicking 'Delete Account'."
             class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-xs"></textarea>
           <p class="text-[11px] text-slate-400 mt-1">Directives passed directly to the autonomous explorer agent.</p>
+        </div>
+      </div>
+
+      <!-- Section 4: Product Requirements Document (PRD) -->
+      <div class="space-y-4 pt-4 border-t border-slate-100">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-semibold text-slate-900 flex items-center">
+            <i class="fa-solid fa-file-contract mr-2 text-indigo-500"></i>Product Requirement Document (PRD)
+          </h3>
+          <span class="text-[11px] font-medium text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">Optional</span>
+        </div>
+        <div>
+          <label for="prd_text" class="block text-xs font-medium text-slate-700">Paste Product Specification / User Stories / Acceptance Criteria</label>
+          <textarea id="prd_text" name="prd_text" rows="5"
+            placeholder="Paste your PRD or Markdown spec here... When provided, the Explorer Agent verifies actual application behavior against these exact acceptance criteria."
+            class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-xs"></textarea>
+          <p class="text-[11px] text-slate-400 mt-1">If empty, the agent autonomously explores the URL alone.</p>
         </div>
       </div>
 

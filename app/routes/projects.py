@@ -28,6 +28,7 @@ def create():
     description = request.form.get("description", "").strip()
     auth_type = request.form.get("auth_type", "none").strip()
     scope_instructions = request.form.get("scope_instructions", "").strip()
+    prd_text = request.form.get("prd_text", "").strip()
 
     if not name or not target_url:
         flash("Project Name and Target URL are required.", "error")
@@ -53,6 +54,7 @@ def create():
         description=description,
         auth_type=auth_type,
         scope_instructions=scope_instructions,
+        prd_text=prd_text,
     )
     project.set_credentials(creds)
 
@@ -80,6 +82,7 @@ def update(project_id):
     project.description = request.form.get("description", "").strip()
     project.auth_type = request.form.get("auth_type", "none").strip()
     project.scope_instructions = request.form.get("scope_instructions", "").strip()
+    project.prd_text = request.form.get("prd_text", "").strip()
 
     creds = {}
     if project.auth_type in ["form", "basic"]:
